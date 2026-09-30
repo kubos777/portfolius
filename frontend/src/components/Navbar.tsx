@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ArrowRight } from 'lucide-react';
+import { Menu, X, ArrowRight, Flame } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import logo from '../assets/kubo.png';
 
 export default function Navbar() {
@@ -15,10 +16,11 @@ export default function Navbar() {
   }, []);
 
   const navLinks = [
-    { name: 'Inicio', href: '#inicio' },
-    { name: 'Sobre mí', href: '#sobre-mi' },
-    { name: 'Proyectos', href: '#proyectos' },
-    { name: 'Contacto', href: '#contacto' },
+    { name: 'Inicio', href: '#inicio', isInternal: false },
+    { name: 'Sobre mí', href: '#sobre-mi', isInternal: false },
+    { name: 'Proyectos', href: '#proyectos', isInternal: false },
+    { name: 'Horror Scraper', href: '/horror-movies', isInternal: true, isNew: true },
+    { name: 'Contacto', href: '#contacto', isInternal: false },
   ];
 
   return (
@@ -27,25 +29,40 @@ export default function Navbar() {
     }`}>
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
         {/* Logo */}
-        <a href="#inicio" className="flex items-center group">
+        <Link to="/" className="flex items-center group">
           <img 
             src={logo} 
             alt="Logo" 
             className="w-12 h-12 group-hover:scale-105 transition-transform drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" 
           />
-        </a>
+        </Link>
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-8">
           <ul className="flex items-center gap-8">
             {navLinks.map((link) => (
               <li key={link.name}>
-                <a
-                  href={link.href}
-                  className="font-medium text-sm text-gray-400 hover:text-white transition-colors relative after:content-[''] after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:height-[2px] after:bg-accent-cyan hover:after:w-full after:transition-all after:duration-300"
-                >
-                  {link.name}
-                </a>
+                {link.isInternal ? (
+                  <Link
+                    to={link.href}
+                    className="font-medium text-sm text-gray-400 hover:text-white transition-colors relative flex items-center gap-1.5 py-1"
+                  >
+                    <span>{link.name}</span>
+                    {link.isNew && (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                        <Flame className="w-2.5 h-2.5" />
+                        DEMO
+                      </span>
+                    )}
+                  </Link>
+                ) : (
+                  <a
+                    href={link.href}
+                    className="font-medium text-sm text-gray-400 hover:text-white transition-colors relative after:content-[''] after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:height-[2px] after:bg-accent-cyan hover:after:w-full after:transition-all after:duration-300"
+                  >
+                    {link.name}
+                  </a>
+                )}
               </li>
             ))}
           </ul>
@@ -79,13 +96,26 @@ export default function Navbar() {
           <ul className="flex flex-col gap-4">
             {navLinks.map((link) => (
               <li key={link.name}>
-                <a
-                  href={link.href}
-                  onClick={() => setIsOpen(false)}
-                  className="block py-2.5 px-4 rounded-xl text-lg font-semibold text-gray-300 hover:text-white hover:bg-white/5 transition-all"
-                >
-                  {link.name}
-                </a>
+                {link.isInternal ? (
+                  <Link
+                    to={link.href}
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center justify-between py-2.5 px-4 rounded-xl text-lg font-semibold text-gray-300 hover:text-white hover:bg-white/5 transition-all"
+                  >
+                    <span>{link.name}</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+                      PROYECTO
+                    </span>
+                  </Link>
+                ) : (
+                  <a
+                    href={link.href}
+                    onClick={() => setIsOpen(false)}
+                    className="block py-2.5 px-4 rounded-xl text-lg font-semibold text-gray-300 hover:text-white hover:bg-white/5 transition-all"
+                  >
+                    {link.name}
+                  </a>
+                )}
               </li>
             ))}
           </ul>

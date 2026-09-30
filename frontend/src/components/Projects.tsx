@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ArrowRight, Film } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface Project {
   id: number;
@@ -8,12 +9,24 @@ interface Project {
   category: 'fullstack' | 'frontend' | 'backend';
   tech: string[];
   gradient: string;
+  route?: string;
+  badge?: string;
 }
 
 export default function Projects() {
   const [filter, setFilter] = useState<'all' | 'fullstack' | 'frontend' | 'backend'>('all');
 
   const projectsData: Project[] = [
+    {
+      id: 0,
+      title: 'Horror Movie Scraper (2000–2026)',
+      description: 'Web Scraper y motor de indexación de películas de terror de los últimos 26 años. Extracción automatizada con Node.js & Cheerio, filtrado dinámico por época, país y subgéneros, y consola interactiva.',
+      category: 'fullstack',
+      tech: ['React', 'Node.js', 'Cheerio', 'Web Scraping', 'Tailwind CSS'],
+      gradient: 'from-red-900 via-rose-700 to-purple-900',
+      route: '/horror-movies',
+      badge: 'APP EN VIVO',
+    },
     {
       id: 1,
       title: 'Desarrollador Web Full Stack - PRESTANÓMICO',
@@ -113,51 +126,70 @@ export default function Projects() {
           {filteredProjects.map((project) => (
             <article
               key={project.id}
-              className="glass-card glass-card-hover rounded-3xl overflow-hidden flex flex-col group h-full"
+              className="glass-card glass-card-hover rounded-3xl overflow-hidden flex flex-col justify-between group h-full border border-white/5 hover:border-primary-500/40"
             >
-              {/* Card visual header */}
-              <div className={`h-48 bg-gradient-to-tr ${project.gradient} p-6 flex flex-col justify-between relative overflow-hidden`}>
-                <div className="absolute inset-0 bg-[#0B0F19]/25 backdrop-blur-[1px] mix-blend-multiply"></div>
-                
-                {/* Decorative Pattern */}
-                <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none"></div>
+              <div>
+                {/* Card visual header */}
+                <div className={`h-48 bg-gradient-to-tr ${project.gradient} p-6 flex flex-col justify-between relative overflow-hidden`}>
+                  <div className="absolute inset-0 bg-[#0B0F19]/25 backdrop-blur-[1px] mix-blend-multiply"></div>
+                  
+                  {/* Decorative Pattern */}
+                  <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none"></div>
 
-                <div className="flex justify-between items-start w-full relative z-10">
-                  <span className="px-3 py-1 rounded-full bg-[#0B0F19]/60 backdrop-blur-md text-[10px] font-bold tracking-wider text-white uppercase border border-white/5">
-                    {project.category}
-                  </span>
-                  <div className="w-8 h-8 rounded-lg bg-[#0B0F19]/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white">
-                    <Sparkles className="w-4 h-4 text-yellow-400 animate-pulse" />
+                  <div className="flex justify-between items-start w-full relative z-10">
+                    <span className="px-3 py-1 rounded-full bg-[#0B0F19]/60 backdrop-blur-md text-[10px] font-bold tracking-wider text-white uppercase border border-white/5">
+                      {project.category}
+                    </span>
+                    {project.badge ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-red-500/80 backdrop-blur-md text-[10px] font-bold text-white border border-red-400/50 shadow-[0_0_10px_rgba(239,68,68,0.5)]">
+                        {project.badge}
+                      </span>
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-[#0B0F19]/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white">
+                        <Sparkles className="w-4 h-4 text-yellow-400 animate-pulse" />
+                      </div>
+                    )}
                   </div>
+
+                  <h3 className="font-display font-extrabold text-lg text-white leading-snug tracking-tight text-left relative z-10 group-hover:translate-x-1 transition-transform duration-300">
+                    {project.title}
+                  </h3>
                 </div>
 
-                <h3 className="font-display font-extrabold text-lg text-white leading-snug tracking-tight text-left relative z-10 group-hover:translate-x-1 transition-transform duration-300">
-                  {project.title}
-                </h3>
-              </div>
+                {/* Card Body */}
+                <div className="p-6 text-left">
+                  <p className="text-gray-400 text-xs sm:text-sm leading-relaxed mb-6">
+                    {project.description}
+                  </p>
 
-              {/* Card Body */}
-              <div className="p-6 flex flex-col justify-between flex-1 text-left">
-                <p className="text-gray-400 text-xs sm:text-sm leading-relaxed mb-6">
-                  {project.description}
-                </p>
-
-                <div>
                   {/* Tech stack */}
-                  <div className="flex flex-wrap gap-1.5 mb-6">
+                  <div className="flex flex-wrap gap-1.5 mb-4">
                     {project.tech.map((t, idx) => (
                       <span
                         key={idx}
-                        className="px-2 py-0.5 rounded-md bg-white/5 border border-white/5 text-[10px] text-gray-500 font-medium"
+                        className="px-2 py-0.5 rounded-md bg-white/5 border border-white/5 text-[10px] text-gray-400 font-medium"
                       >
                         {t}
                       </span>
                     ))}
                   </div>
-
-
                 </div>
               </div>
+
+              {/* Action Link for Route */}
+              {project.route && (
+                <div className="p-6 pt-0">
+                  <Link
+                    to={project.route}
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:shadow-[0_0_25px_rgba(239,68,68,0.5)] group/link"
+                    id="open-horror-scraper-btn"
+                  >
+                    <Film className="w-3.5 h-3.5 text-white" />
+                    <span>Explorar Scrapper & Películas</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover/link:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
+              )}
             </article>
           ))}
         </div>
