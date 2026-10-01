@@ -186,7 +186,7 @@ export default function Projects() {
                       id="generate-today-poster-project-btn"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-yellow-200 animate-spin" style={{ animationDuration: '3s' }} />
-                      <span>🖼️ Generar Póster de Hoy (5 Películas) 🎃</span>
+                      <span>🖼️ Generar Póster de Hoy (3 Películas) 🎃</span>
                     </Link>
                   )}
 

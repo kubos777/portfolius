@@ -244,7 +244,7 @@ function renderTheatricalPoster({
   ctx.fillStyle = '#FFFFFF';
   ctx.shadowColor = 'rgba(239, 68, 68, 0.85)';
   ctx.shadowBlur = 24;
-  ctx.fillText('LAS 5 PELÍCULAS DE HOY', 540, 190);
+  ctx.fillText('LAS 3 PELÍCULAS DE HOY', 540, 190);
 
   // Sub-header (Day)
   ctx.font = '900 42px sans-serif';
@@ -259,7 +259,7 @@ function renderTheatricalPoster({
   ctx.font = '600 23px sans-serif';
   ctx.fillStyle = '#CBD5E1';
   const subtitleStr = isAllYearsSelected
-    ? 'Cartelera Oficial del Reto • Archivo Histórico (2000–2026)'
+    ? '3 Películas Obligatorias del Reto • Archivo Histórico (2000–2026)'
     : `Edición Terror (${selectedYears.length} Años: ${selectedYears.slice(0, 3).join(', ')}${selectedYears.length > 3 ? '...' : ''})`;
   ctx.fillText(subtitleStr, 540, 302);
 
@@ -275,12 +275,12 @@ function renderTheatricalPoster({
   ctx.lineTo(940, 335);
   ctx.stroke();
 
-  // 6. The 5 Movie Cards
-  const cardStartY = 365;
-  const cardHeight = 230;
-  const cardGap = 24;
+  // 6. The 3 Mandatory Movie Cards (Generous 350px tall layout for maximum legibility)
+  const cardStartY = 380;
+  const cardHeight = 350;
+  const cardGap = 35;
 
-  movies.forEach((movie, i) => {
+  movies.slice(0, 3).forEach((movie, i) => {
     const cardY = cardStartY + i * (cardHeight + cardGap);
     const isWatched = !!watched[movie.id];
     const cardW = 940;
@@ -288,22 +288,22 @@ function renderTheatricalPoster({
 
     // Card background
     ctx.fillStyle = isWatched ? 'rgba(22, 16, 32, 0.96)' : 'rgba(14, 11, 20, 0.94)';
-    drawCanvasRoundRect(ctx, cardX, cardY, cardW, cardHeight, 18);
+    drawCanvasRoundRect(ctx, cardX, cardY, cardW, cardHeight, 22);
     ctx.fill();
 
     // Card border
-    ctx.strokeStyle = isWatched ? '#10B981' : 'rgba(249, 115, 22, 0.35)';
-    ctx.lineWidth = isWatched ? 2.5 : 1.5;
+    ctx.strokeStyle = isWatched ? '#10B981' : 'rgba(249, 115, 22, 0.45)';
+    ctx.lineWidth = isWatched ? 3 : 2;
     ctx.stroke();
 
-    // Movie Thumbnail Poster
-    const thumbX = cardX + 18;
-    const thumbY = cardY + 16;
-    const thumbW = 132;
-    const thumbH = 198;
+    // Movie Thumbnail Poster (Large 205x310 cinematic format)
+    const thumbX = cardX + 22;
+    const thumbY = cardY + 20;
+    const thumbW = 205;
+    const thumbH = 310;
 
     ctx.save();
-    drawCanvasRoundRect(ctx, thumbX, thumbY, thumbW, thumbH, 12);
+    drawCanvasRoundRect(ctx, thumbX, thumbY, thumbW, thumbH, 16);
     ctx.clip();
 
     const img = loadedImages[i];
@@ -318,117 +318,131 @@ function renderTheatricalPoster({
       ctx.fillRect(thumbX, thumbY, thumbW, thumbH);
 
       ctx.textAlign = 'center';
-      ctx.font = '36px sans-serif';
-      ctx.fillText('💀', thumbX + thumbW / 2, thumbY + 80);
-      ctx.font = 'bold 18px monospace';
-      ctx.fillStyle = '#F97316';
-      ctx.fillText(String(movie.year), thumbX + thumbW / 2, thumbY + 120);
-      ctx.font = '11px sans-serif';
-      ctx.fillStyle = '#9CA3AF';
-      ctx.fillText('HD ARCHIVE', thumbX + thumbW / 2, thumbY + 145);
+      ctx.font = '50px sans-serif';
+      ctx.fillText('💀', thumbX + thumbW / 2, thumbY + 120);
+      ctx.font = '900 28px monospace';
+      ctx.fillStyle = '#EA580C';
+      ctx.fillText(String(movie.year), thumbX + thumbW / 2, thumbY + 180);
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillText('HD ARCHIVE', thumbX + thumbW / 2, thumbY + 220);
     }
 
     // Thumbnail gradient footer
-    const tOver = ctx.createLinearGradient(thumbX, thumbY + 120, thumbX, thumbY + thumbH);
+    const tOver = ctx.createLinearGradient(thumbX, thumbY + 180, thumbX, thumbY + thumbH);
     tOver.addColorStop(0, 'rgba(0,0,0,0)');
-    tOver.addColorStop(1, 'rgba(0,0,0,0.8)');
+    tOver.addColorStop(1, 'rgba(0,0,0,0.85)');
     ctx.fillStyle = tOver;
-    ctx.fillRect(thumbX, thumbY + 120, thumbW, 78);
+    ctx.fillRect(thumbX, thumbY + 180, thumbW, 130);
     ctx.restore();
 
     // Thumbnail border
-    ctx.strokeStyle = isWatched ? 'rgba(16, 185, 129, 0.6)' : 'rgba(249, 115, 22, 0.45)';
-    ctx.lineWidth = 1.5;
-    drawCanvasRoundRect(ctx, thumbX, thumbY, thumbW, thumbH, 12);
+    ctx.strokeStyle = isWatched ? 'rgba(16, 185, 129, 0.7)' : 'rgba(249, 115, 22, 0.55)';
+    ctx.lineWidth = 2;
+    drawCanvasRoundRect(ctx, thumbX, thumbY, thumbW, thumbH, 16);
     ctx.stroke();
 
     // Circular Number Badge
-    ctx.fillStyle = '#F97316';
+    ctx.fillStyle = '#EA580C';
     ctx.beginPath();
-    ctx.arc(thumbX + 16, thumbY + 16, 18, 0, Math.PI * 2);
+    ctx.arc(thumbX + 22, thumbY + 22, 22, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.font = '900 18px sans-serif';
+    ctx.font = '900 22px sans-serif';
     ctx.fillStyle = '#000000';
-    ctx.fillText(String(i + 1), thumbX + 16, thumbY + 22);
+    ctx.fillText(String(i + 1), thumbX + 22, thumbY + 30);
 
     // Text details
-    const textX = thumbX + thumbW + 24;
+    const textX = thumbX + thumbW + 30;
 
     // Title
     ctx.textAlign = 'left';
-    ctx.font = '900 32px sans-serif';
+    ctx.font = '900 38px sans-serif';
     ctx.fillStyle = '#FFFFFF';
     ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 10;
     let titleStr = movie.title;
-    if (titleStr.length > 28) titleStr = titleStr.substring(0, 26) + '...';
-    ctx.fillText(titleStr, textX, cardY + 54);
+    if (titleStr.length > 25) titleStr = titleStr.substring(0, 23) + '...';
+    ctx.fillText(titleStr, textX, cardY + 68);
     ctx.shadowBlur = 0;
 
-    // Year & Genre
-    ctx.fillStyle = 'rgba(249, 115, 22, 0.2)';
-    ctx.strokeStyle = '#F97316';
-    ctx.lineWidth = 1;
-    drawCanvasRoundRect(ctx, textX, cardY + 76, 78, 28, 6);
+    // Year & Genre - ULTRA HIGH VISIBILITY YEAR BADGE
+    ctx.fillStyle = '#EA580C'; // Solid bright neon pumpkin
+    drawCanvasRoundRect(ctx, textX, cardY + 98, 110, 42, 8);
     ctx.fill();
+    ctx.strokeStyle = '#FFEDD5';
+    ctx.lineWidth = 1.5;
+    drawCanvasRoundRect(ctx, textX, cardY + 98, 110, 42, 8);
     ctx.stroke();
 
     ctx.textAlign = 'center';
-    ctx.font = 'bold 16px monospace';
-    ctx.fillStyle = '#FB923C';
-    ctx.fillText(String(movie.year), textX + 39, cardY + 96);
+    ctx.font = '900 24px monospace';
+    ctx.fillStyle = '#000000'; // High contrast black on bright neon orange
+    ctx.fillText(String(movie.year), textX + 55, cardY + 128);
 
+    // Subgenre
     ctx.textAlign = 'left';
-    ctx.font = 'bold 20px sans-serif';
+    ctx.font = 'bold 26px sans-serif';
     ctx.fillStyle = '#FDBA74';
     let genreStr = movie.subgenre || 'Terror';
     if (genreStr.length > 22) genreStr = genreStr.substring(0, 20) + '...';
-    ctx.fillText(`•  ${genreStr}`, textX + 90, cardY + 96);
+    ctx.fillText(`•   ${genreStr}`, textX + 125, cardY + 128);
 
     // Director
-    ctx.font = '500 21px sans-serif';
-    ctx.fillStyle = '#E2E8F0';
+    ctx.font = '600 24px sans-serif';
+    ctx.fillStyle = '#F1F5F9';
     let dirStr = `🎬 Dir: ${movie.director.split(',')[0].trim()}`;
-    if (dirStr.length > 34) dirStr = dirStr.substring(0, 32) + '...';
-    ctx.fillText(dirStr, textX, cardY + 142);
+    if (dirStr.length > 32) dirStr = dirStr.substring(0, 30) + '...';
+    ctx.fillText(dirStr, textX, cardY + 195);
 
     // Cast
-    ctx.font = '400 19px sans-serif';
-    ctx.fillStyle = '#94A3B8';
+    ctx.font = '400 22px sans-serif';
+    ctx.fillStyle = '#CBD5E1';
     let castStr = movie.cast && movie.cast !== 'Desconocido'
-      ? `👥 Reparto: ${movie.cast.split(',').slice(0, 3).join(', ')}`
+      ? `👥 Elenco: ${movie.cast.split(',').slice(0, 3).join(', ')}`
       : '👥 Elenco: Joya de Terror de Culto';
-    if (castStr.length > 38) castStr = castStr.substring(0, 36) + '...';
-    ctx.fillText(castStr, textX, cardY + 180);
+    if (castStr.length > 34) castStr = castStr.substring(0, 32) + '...';
+    ctx.fillText(castStr, textX, cardY + 248);
 
-    // Watched Status Badge on right
-    const badgeX = cardX + cardW - 160;
-    const badgeY = cardY + 84;
+    // Watched Status Badge on right - ULTRA HIGH VISIBILITY POR VER / VISTA
+    const badgeX = cardX + cardW - 200;
+    const badgeY = cardY + 140;
+    const badgeW = 175;
+    const badgeH = 64;
+
     if (isWatched) {
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.28)';
       ctx.strokeStyle = '#10B981';
-      ctx.lineWidth = 1.5;
-      drawCanvasRoundRect(ctx, badgeX, badgeY, 140, 48, 10);
+      ctx.lineWidth = 3;
+      drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 14);
       ctx.fill();
       ctx.stroke();
 
       ctx.textAlign = 'center';
-      ctx.font = 'bold 19px sans-serif';
-      ctx.fillStyle = '#34D399';
-      ctx.fillText('✓ VISTA 👁️', badgeX + 70, badgeY + 31);
+      ctx.font = '900 24px sans-serif';
+      ctx.fillStyle = '#6EE7B7';
+      ctx.shadowColor = 'rgba(16, 185, 129, 0.9)';
+      ctx.shadowBlur = 12;
+      ctx.fillText('✓ VISTA 👁️', badgeX + badgeW / 2, badgeY + 41);
+      ctx.shadowBlur = 0;
     } else {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.lineWidth = 1.5;
-      drawCanvasRoundRect(ctx, badgeX, badgeY, 140, 48, 10);
+      ctx.fillStyle = 'rgba(234, 88, 12, 0.3)';
+      ctx.strokeStyle = '#F97316';
+      ctx.lineWidth = 3;
+      drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 14);
       ctx.fill();
       ctx.stroke();
 
       ctx.textAlign = 'center';
-      ctx.font = 'bold 17px sans-serif';
-      ctx.fillStyle = '#9CA3AF';
-      ctx.fillText('🎃 POR VER', badgeX + 70, badgeY + 31);
+      ctx.font = '900 24px sans-serif';
+      ctx.fillStyle = '#FFFFFF';
+      ctx.shadowColor = 'rgba(249, 115, 22, 0.95)';
+      ctx.shadowBlur = 14;
+      ctx.fillText('🎃 POR VER', badgeX + badgeW / 2, badgeY + 41);
+      ctx.shadowBlur = 0;
     }
   });
 
@@ -436,37 +450,34 @@ function renderTheatricalPoster({
   const isDaySuperado = watchedCount >= 3;
   ctx.fillStyle = 'rgba(15, 10, 22, 0.9)';
   ctx.strokeStyle = isDaySuperado ? '#10B981' : '#F59E0B';
-  ctx.lineWidth = 2;
-  drawCanvasRoundRect(ctx, 90, 1640, 900, 74, 16);
+  ctx.lineWidth = 2.5;
+  drawCanvasRoundRect(ctx, 90, 1600, 900, 80, 18);
   ctx.fill();
   ctx.stroke();
 
   ctx.textAlign = 'center';
-  ctx.font = '900 24px sans-serif';
+  ctx.font = '900 26px sans-serif';
   if (isDaySuperado) {
     ctx.fillStyle = '#34D399';
     ctx.shadowColor = 'rgba(16, 185, 129, 0.8)';
-    ctx.shadowBlur = 12;
-    ctx.fillText(`🏆 ¡RETO DÍA ${day} SUPERADO! (${watchedCount}/5 VISTAS) 🏆`, 540, 1686);
+    ctx.shadowBlur = 14;
+    ctx.fillText(`🏆 ¡RETO DÍA ${day} SUPERADO! (3/3 PELÍCULAS VISTAS) 🏆`, 540, 1650);
   } else {
     ctx.fillStyle = '#FBBF24';
     ctx.shadowBlur = 0;
-    ctx.fillText(`🎃 RETO DÍA ${day}: ${watchedCount}/5 PELÍCULAS VISTAS (Meta: ver al menos 3)`, 540, 1686);
+    ctx.fillText(`🎃 RETO DÍA ${day}: ${watchedCount}/3 PELÍCULAS VISTAS (Las 3 son obligatorias)`, 540, 1650);
   }
   ctx.shadowBlur = 0;
 
-  // Platform brand
-  ctx.font = 'bold 22px monospace';
+  // Platform brand without PORTFOLIUS
+  ctx.font = 'bold 26px monospace';
   ctx.fillStyle = '#F97316';
-  ctx.fillText('PORTFOLIUS • EL ARCHIVO DEL TERROR', 540, 1755);
+  ctx.fillText('EL ARCHIVO DEL TERROR DE HALLOWEEN', 540, 1735);
 
-  ctx.font = '500 18px monospace';
-  ctx.fillStyle = '#94A3B8';
-  ctx.fillText('3,088 Películas de Terror (2000–2026) • Creado por Jorge Chávez (@kubos777)', 540, 1795);
-
-  ctx.font = '400 16px sans-serif';
-  ctx.fillStyle = '#64748B';
-  ctx.fillText('Disponibles en Streaming • Busca cada título en JustWatch', 540, 1830);
+  // Author watermark with Hecho con ♥ por kubos777
+  ctx.font = '500 22px monospace';
+  ctx.fillStyle = '#E2E8F0';
+  ctx.fillText('3,088 Películas (2000–2026) • Hecho con ♥ por kubos777', 540, 1785);
 }
 
 export default function HalloweenRoulette({ allMovies, onSelectMovie }: HalloweenRouletteProps) {
@@ -484,7 +495,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
   const todayDayNumber = getTodayDay();
   const [selectedDay, setSelectedDay] = useState<number>(getTodayDay);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [revealedCount, setRevealedCount] = useState<number>(5);
+  const [revealedCount, setRevealedCount] = useState<number>(3);
   const [dailyPicks, setDailyPicks] = useState<Movie[]>([]);
   const [watchedStatus, setWatchedStatus] = useState<Record<string, boolean>>({});
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -617,11 +628,11 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             .map((id: string) => allMovies.find((m) => m.id === id))
             .filter(Boolean) as Movie[];
 
-          if (matched.length === 5) {
-            setDailyPicks(matched);
-            setRevealedCount(5);
+          if (matched.length >= 3) {
+            setDailyPicks(matched.slice(0, 3));
+            setRevealedCount(3);
             const wMap: Record<string, boolean> = {};
-            decoded.m.forEach((id: string, idx: number) => {
+            decoded.m.slice(0, 3).forEach((id: string, idx: number) => {
               wMap[id] = !!(decoded.w && decoded.w[idx]);
             });
             setWatchedStatus(wMap);
@@ -657,8 +668,13 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
 
       const savedPicks = localStorage.getItem(`spooktober_picks_day_${selectedDay}`);
       if (savedPicks) {
-        setDailyPicks(JSON.parse(savedPicks));
-        setRevealedCount(5);
+        const parsed = JSON.parse(savedPicks);
+        if (Array.isArray(parsed) && parsed.length >= 3) {
+          setDailyPicks(parsed.slice(0, 3));
+          setRevealedCount(3);
+        } else {
+          generatePicksForDay(selectedDay, false, yearsToUse);
+        }
       } else {
         generatePicksForDay(selectedDay, false, yearsToUse);
       }
@@ -669,7 +685,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
 
   // High performance movie pick generation with multi-year filter and Fisher-Yates sampling
   const generatePicksForDay = (day: number, shouldAnimate = true, yearsToUse = selectedYears) => {
-    if (allMovies.length < 5) return;
+    if (allMovies.length < 3) return;
 
     const targetYears = yearsToUse && yearsToUse.length > 0 ? yearsToUse : ALL_YEARS;
     const yearSet = new Set(targetYears);
@@ -679,7 +695,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       : allMovies.filter((m) => yearSet.has(m.year));
 
     const eligibleMovies = yearFiltered.filter((m) => m.title && m.director && m.director !== 'Desconocido');
-    const pool = eligibleMovies.length >= 5 ? eligibleMovies : yearFiltered;
+    const pool = eligibleMovies.length >= 3 ? eligibleMovies : yearFiltered;
     if (pool.length === 0) return;
 
     // Fast Fisher-Yates sampling (O(N) with 0 trig calls)
@@ -695,7 +711,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
 
     // Pass 1: Prioritize year diversity across selected years
     for (const movie of shuffled) {
-      if (picks.length >= 5) break;
+      if (picks.length >= 3) break;
       if (!usedIds.has(movie.id)) {
         if (!usedYears.has(movie.year) || picks.length >= targetYears.length) {
           picks.push(movie);
@@ -705,10 +721,10 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       }
     }
 
-    // Pass 2: Fill remaining up to 5
-    if (picks.length < 5) {
+    // Pass 2: Fill remaining up to 3
+    if (picks.length < 3) {
       for (const movie of shuffled) {
-        if (picks.length >= 5) break;
+        if (picks.length >= 3) break;
         if (!usedIds.has(movie.id)) {
           picks.push(movie);
           usedIds.add(movie.id);
@@ -733,7 +749,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         setIsSpinning(false);
         if (soundEnabled) playSpookySound('win');
 
-        for (let i = 1; i <= 5; i++) {
+        for (let i = 1; i <= 3; i++) {
           setTimeout(() => {
             setRevealedCount(i);
             if (soundEnabled) playSpookySound('reveal');
@@ -742,7 +758,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       }, 950);
     } else {
       setDailyPicks(picks);
-      setRevealedCount(5);
+      setRevealedCount(3);
     }
 
     try {
@@ -768,15 +784,15 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
 
   // Deterministic or cached movie pick loader for any given day
   const getPicksForSpecificDay = (day: number, yearsToUse = selectedYears): Movie[] => {
-    if (day === selectedDay && dailyPicks.length === 5) {
+    if (day === selectedDay && dailyPicks.length === 3) {
       return dailyPicks;
     }
     try {
       const saved = localStorage.getItem(`spooktober_picks_day_${day}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === 5) {
-          return parsed;
+        if (Array.isArray(parsed) && parsed.length >= 3) {
+          return parsed.slice(0, 3);
         }
       }
     } catch {}
@@ -784,12 +800,12 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     const targetYears = yearsToUse && yearsToUse.length > 0 ? yearsToUse : ALL_YEARS;
     const yearSet = new Set(targetYears);
     const pool = allMovies.filter((m) => yearSet.has(m.year) && m.title && m.director && m.director !== 'Desconocido');
-    const source = pool.length >= 5 ? pool : allMovies;
+    const source = pool.length >= 3 ? pool : allMovies;
     if (source.length === 0) return [];
 
     const picks: Movie[] = [];
     const used = new Set<string>();
-    for (let i = 0; i < source.length && picks.length < 5; i++) {
+    for (let i = 0; i < source.length && picks.length < 3; i++) {
       const idx = (day * 37 + i * 113) % source.length;
       const m = source[idx];
       if (!used.has(m.id)) {
@@ -800,16 +816,16 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     return picks;
   };
 
-  // Generate Theatrical Poster with 5 Movies on Canvas
+  // Generate Theatrical Poster with 3 Mandatory Movies on Canvas
   const handleGeneratePosterForDay = async (targetDay: number = todayDayNumber) => {
     if (isGeneratingPoster) return;
     setIsGeneratingPoster(true);
 
     try {
-      // 1. Get 5 movies for targetDay
+      // 1. Get 3 mandatory movies for targetDay
       let picks = getPicksForSpecificDay(targetDay, selectedYears);
-      if (!picks || picks.length < 5) {
-        picks = allMovies.slice(0, 5);
+      if (!picks || picks.length < 3) {
+        picks = allMovies.slice(0, 3);
       }
 
       // 2. Get watched status for targetDay
@@ -1011,7 +1027,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             <span className="text-2xl">🎃</span>
           </h2>
           <p className="mt-2 text-sm text-gray-400 max-w-2xl">
-            Gira la ruleta y convoca 5 películas de terror para cada día de octubre. Marca las que logres ver, comparte tu enlace único o genera tu tarjeta historia para Instagram.
+            Gira la ruleta y convoca 3 películas de terror para cada día de octubre. Las 3 son obligatorias para superar el reto diario y generar tu póster oficial.
           </p>
         </div>
 
@@ -1040,7 +1056,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             disabled={isGeneratingPoster || allMovies.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-orange-600 to-red-600 hover:from-amber-400 hover:to-red-500 text-white shadow-[0_0_25px_rgba(249,115,22,0.4)] hover:shadow-[0_0_35px_rgba(249,115,22,0.7)] transition-all transform hover:scale-[1.03] active:scale-95 cursor-pointer disabled:opacity-50"
             id="generate-today-poster-btn"
-            title="Generar póster en alta resolución con las 5 películas de hoy"
+            title="Generar póster en alta resolución con las 3 películas obligatorias de hoy"
           >
             {isGeneratingPoster ? (
               <>
@@ -1050,7 +1066,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             ) : (
               <>
                 <Sparkles className="w-4 h-4 text-yellow-200 animate-pulse" />
-                <span>🖼️ Póster de Hoy (5 Películas) 🎃</span>
+                <span>🖼️ Póster de Hoy (3 Películas) 🎃</span>
               </>
             )}
           </button>
@@ -1305,25 +1321,25 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>Las 5 del Día</span>
+              <span>Las 3 del Día</span>
               <span className={`text-xs px-2.5 py-0.5 rounded font-mono font-bold ${
                 isDaySuperado 
                   ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' 
                   : 'bg-orange-950 text-orange-400 border border-orange-500/30'
               }`}>
-                {watchedCount}/5 Vistas
+                {watchedCount}/3 Vistas
               </span>
             </h3>
 
             {isDaySuperado ? (
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-xs font-bold font-mono shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse">
                 <Trophy className="w-3.5 h-3.5 text-emerald-400" />
-                <span>¡RETO DEL DÍA SUPERADO! (3+ vistas) 🏆</span>
+                <span>¡RETO DEL DÍA SUPERADO! (3/3 vistas) 🏆</span>
               </div>
             ) : (
               <span className="text-xs text-orange-300/80 font-mono">
                 {watchedCount === 0 
-                  ? '🎯 Mira al menos 3 de las 5 para superar el reto' 
+                  ? '🎯 Mira las 3 películas obligatorias para superar el reto' 
                   : `🔥 Te falta${3 - watchedCount === 1 ? '' : 'n'} ${3 - watchedCount} para superar el reto de hoy`}
               </span>
             )}
@@ -1344,7 +1360,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
                 onClick={() => handleGeneratePosterForDay(todayDayNumber)}
                 disabled={isGeneratingPoster || allMovies.length === 0}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-orange-950/80 hover:bg-orange-900 border border-orange-500/50 text-orange-200 hover:text-white transition-all shadow-[0_0_10px_rgba(249,115,22,0.2)] cursor-pointer"
-                title="Generar póster con las 5 películas de hoy"
+                title="Generar póster con las 3 películas de hoy"
               >
                 <ImageIcon className="w-3.5 h-3.5 text-orange-400" />
                 <span>Póster de Hoy 🎃</span>
@@ -1353,7 +1369,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 max-w-5xl mx-auto gap-6">
           {dailyPicks.map((movie, index) => {
             const isRevealed = index < revealedCount;
             const isWatched = !!watchedStatus[movie.id];
@@ -1488,11 +1504,11 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
               </div>
               <h3 className="text-lg sm:text-xl font-black text-white">
                 {posterTargetDay === todayDayNumber
-                  ? `🎃 Las 5 de Hoy (Día ${posterTargetDay})`
+                  ? `🎃 Las 3 de Hoy (Día ${posterTargetDay})`
                   : `🎃 Póster del Día ${posterTargetDay} de Octubre`}
               </h3>
               <p className="text-xs text-gray-400 mt-0.5">
-                Formato HD (1080x1920) listo para historias de Instagram, WhatsApp o descargar
+                Formato HD (1080x1920) con las 3 películas obligatorias, listo para historias de Instagram, WhatsApp o descargar
               </p>
             </div>
 
