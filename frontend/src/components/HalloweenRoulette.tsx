@@ -8,10 +8,12 @@ import {
   Calendar, 
   Skull, 
   Film, 
-  Flame,
-  Volume2,
-  VolumeX,
-  X
+  Flame, 
+  Volume2, 
+  VolumeX, 
+  X,
+  Link2,
+  Check
 } from 'lucide-react';
 import storyBgImage from '../assets/halloween_story_bg.jpg';
 
@@ -92,11 +94,42 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
   const [showStoryModal, setShowStoryModal] = useState(false);
   const [generatedStoryUrl, setGeneratedStoryUrl] = useState<string | null>(null);
   const [posters, setPosters] = useState<Record<string, string>>({});
+  const [isSharedView, setIsSharedView] = useState(false);
+  const [copiedToast, setCopiedToast] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Load saved watched status and selections from localStorage
+  // Check URL query parameters for shared challenge on mount
   useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const challengeToken = params.get('challenge');
+      if (challengeToken && allMovies.length > 0) {
+        const decoded = JSON.parse(decodeURIComponent(escape(atob(challengeToken))));
+        if (decoded.d && Array.isArray(decoded.m)) {
+          setSelectedDay(decoded.d);
+          const matched = decoded.m
+            .map((id: string) => allMovies.find((m) => m.id === id))
+            .filter(Boolean) as Movie[];
+
+          if (matched.length === 5) {
+            setDailyPicks(matched);
+            setRevealedCount(5);
+            const wMap: Record<string, boolean> = {};
+            decoded.m.forEach((id: string, idx: number) => {
+              wMap[id] = !!(decoded.w && decoded.w[idx]);
+            });
+            setWatchedStatus(wMap);
+            setIsSharedView(true);
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not parse shared challenge from URL', e);
+    }
+
+    // Load saved watched status and selections from localStorage
     try {
       const savedWatched = localStorage.getItem(`spooktober_watched_day_${selectedDay}`);
       if (savedWatched) {
@@ -110,14 +143,12 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         setDailyPicks(JSON.parse(savedPicks));
         setRevealedCount(5);
       } else {
-        // Generate deterministic picks based on the day
         generatePicksForDay(selectedDay, false);
       }
     } catch {
-      // Fallback
       generatePicksForDay(selectedDay, false);
     }
-  }, [selectedDay]);
+  }, [selectedDay, allMovies]);
 
   // Fetch poster thumbnail from Wikipedia REST API for the 5 picks
   useEffect(() => {
@@ -344,11 +375,61 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     a.remove();
   };
 
+  // Share Permalink (Instagram bio, WhatsApp, Facebook, etc.)
+  const handleSharePermalink = () => {
+    if (dailyPicks.length === 0) return;
+    const challengeData = {
+      d: selectedDay,
+      m: dailyPicks.map((p) => p.id),
+      w: dailyPicks.map((p) => (watchedStatus[p.id] ? 1 : 0)),
+    };
+    const token = btoa(unescape(encodeURIComponent(JSON.stringify(challengeData))));
+    const shareUrl = `${window.location.origin}/horror-movies?challenge=${token}`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: `Spooktober 31-Day Horror Challenge - Día ${selectedDay}`,
+        text: `¡Mira mi maratón de 5 películas de terror para el Día ${selectedDay} de Octubre! ¿Aceptas el reto?`,
+        url: shareUrl,
+      }).catch(() => {
+        navigator.clipboard.writeText(shareUrl);
+        setCopiedToast(true);
+        setTimeout(() => setCopiedToast(false), 3000);
+      });
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      setCopiedToast(true);
+      setTimeout(() => setCopiedToast(false), 3000);
+    }
+  };
+
   return (
     <section className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-[#130E1C] via-[#0E0C17] to-[#0A0812] border-2 border-orange-950/60 p-6 sm:p-10 shadow-[0_0_50px_rgba(249,115,22,0.1)]">
       {/* Halloween decorative elements */}
       <div className="absolute top-0 right-0 w-72 h-72 bg-orange-600/10 blur-[100px] pointer-events-none rounded-full" />
       <div className="absolute bottom-0 left-0 w-72 h-72 bg-red-600/10 blur-[100px] pointer-events-none rounded-full" />
+
+      {/* Shared Challenge Banner */}
+      {isSharedView && (
+        <div className="mb-6 p-4 rounded-2xl bg-orange-950/80 border border-orange-500/50 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-orange-200 relative z-20">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">👻</span>
+            <span>
+              <strong>¡Estás viendo un Reto de Halloween compartido!</strong> Este maratón fue generado para el Día {selectedDay} de Octubre.
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setIsSharedView(false);
+              window.history.replaceState({}, '', '/horror-movies');
+              generatePicksForDay(selectedDay, true);
+            }}
+            className="px-3 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold transition-colors"
+          >
+            Girar mi propia ruleta
+          </button>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-orange-950/60 relative z-10">
@@ -362,18 +443,28 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             <span className="text-2xl">🎃</span>
           </h2>
           <p className="mt-2 text-sm text-gray-400 max-w-2xl">
-            Gira la ruleta y convoca 5 películas de terror para cada día de octubre. Marca las que logres ver y genera tu tarjeta en formato historia para compartir en Instagram.
+            Gira la ruleta y convoca 5 películas de terror para cada día de octubre. Marca las que logres ver, comparte tu enlace único o genera tu tarjeta historia para Instagram.
           </p>
         </div>
 
-        {/* Audio Toggle & Instagram Button */}
-        <div className="flex items-center gap-3">
+        {/* Audio Toggle, Share Link & Instagram Button */}
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
             className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
             title={soundEnabled ? 'Silenciar efectos' : 'Activar efectos de sonido'}
           >
             {soundEnabled ? <Volume2 className="w-4 h-4 text-orange-400" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={handleSharePermalink}
+            disabled={dailyPicks.length === 0}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white/5 border border-white/10 hover:bg-white/10 text-gray-200 hover:text-white transition-all disabled:opacity-50"
+            title="Copiar enlace permanente para compartir en historias o mensajes"
+          >
+            {copiedToast ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5 text-orange-400" />}
+            <span>{copiedToast ? '¡Enlace Copiado!' : 'Copiar Enlace'}</span>
           </button>
 
           <button
