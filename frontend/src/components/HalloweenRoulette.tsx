@@ -7,7 +7,6 @@ import {
   Share2, 
   Calendar, 
   Skull, 
-  Film, 
   Flame, 
   Volume2, 
   VolumeX, 
@@ -18,9 +17,11 @@ import {
   ExternalLink,
   Trophy,
   Filter,
-  Sparkles
+  Sparkles,
+  Layers
 } from 'lucide-react';
 import storyBgImage from '../assets/halloween_story_bg.jpg';
+import MoviePoster from './MoviePoster';
 
 interface Movie {
   id: string;
@@ -38,37 +39,55 @@ interface HalloweenRouletteProps {
   onSelectMovie: (movie: Movie) => void;
 }
 
-// Sound effects generator using Web Audio API (no external asset dependencies)
+// Singleton AudioContext for ultra-fast, stutter-free spooky audio
+let sharedAudioCtx: AudioContext | null = null;
+function getSharedAudioContext(): AudioContext | null {
+  try {
+    if (!sharedAudioCtx) {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        sharedAudioCtx = new AudioCtxClass();
+      }
+    }
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume();
+    }
+    return sharedAudioCtx;
+  } catch {
+    return null;
+  }
+}
+
+// Sound effects generator using Web Audio API
 function playSpookySound(type: 'spin' | 'reveal' | 'win') {
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
 
     if (type === 'spin') {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(140, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.15);
+      osc.stop(ctx.currentTime + 0.12);
     } else if (type === 'reveal') {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(220, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.09, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.25);
+      osc.stop(ctx.currentTime + 0.2);
     } else if (type === 'win') {
       // Eerie gong chord
       [110, 164.81, 196, 261.63].forEach((freq) => {
@@ -76,12 +95,12 @@ function playSpookySound(type: 'spin' | 'reveal' | 'win') {
         const gain = ctx.createGain();
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(freq, ctx.currentTime);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start();
-        osc.stop(ctx.currentTime + 1.2);
+        osc.stop(ctx.currentTime + 1.1);
       });
     }
   } catch {
@@ -99,6 +118,8 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     return Math.min(Math.max(now.getDate(), 1), 31);
   };
 
+  const ALL_YEARS = useMemo(() => Array.from({ length: 27 }, (_, i) => 2026 - i), []);
+
   const todayDayNumber = getTodayDay();
   const [selectedDay, setSelectedDay] = useState<number>(getTodayDay);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -108,20 +129,24 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showStoryModal, setShowStoryModal] = useState(false);
   const [generatedStoryUrl, setGeneratedStoryUrl] = useState<string | null>(null);
-  const [posters, setPosters] = useState<Record<string, string>>({});
   const [isSharedView, setIsSharedView] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
-  const [rouletteYearFilter, setRouletteYearFilter] = useState<string>('all');
+
+  // Multi-Year selection state (defaults to all years)
+  const [selectedYears, setSelectedYears] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem('spooktober_selected_years');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return Array.from({ length: 27 }, (_, i) => 2026 - i);
+  });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Available years list (descending 2026 -> 2000)
-  const availableYears = useMemo(() => {
-    const years = Array.from(new Set(allMovies.map((m) => m.year))).sort((a, b) => b - a);
-    return years;
-  }, [allMovies]);
-
-  // Total films count per year
+  // Total films count per year (memoized once)
   const filmsCountByYear = useMemo(() => {
     const counts: Record<number, number> = {};
     allMovies.forEach((m) => {
@@ -130,8 +155,17 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     return counts;
   }, [allMovies]);
 
-  // Compute completed days (where user marked at least 3 out of 5 movies)
-  const completedDays = useMemo(() => {
+  // Total movies available in current year filter selection
+  const selectedYearsMoviesCount = useMemo(() => {
+    if (selectedYears.length === ALL_YEARS.length) return allMovies.length;
+    const set = new Set(selectedYears);
+    return allMovies.filter((m) => set.has(m.year)).length;
+  }, [selectedYears, allMovies, ALL_YEARS.length]);
+
+  const isAllYearsSelected = selectedYears.length === ALL_YEARS.length;
+
+  // Compute completed days lazily ONCE on mount (avoids 31 synchronous localStorage reads on every render!)
+  const [completedDays, setCompletedDays] = useState<Record<number, boolean>>(() => {
     const completed: Record<number, boolean> = {};
     for (let d = 1; d <= 31; d++) {
       try {
@@ -146,10 +180,50 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       } catch {}
     }
     return completed;
-  }, [watchedStatus, selectedDay]);
+  });
 
   const watchedCount = Object.values(watchedStatus).filter(Boolean).length;
   const isDaySuperado = watchedCount >= 3;
+
+  // Toggle single year in multi-select
+  const toggleYear = (year: number) => {
+    let updated: number[];
+    if (isAllYearsSelected) {
+      // If all were active, clicking one isolates that specific year
+      updated = [year];
+    } else if (selectedYears.includes(year)) {
+      if (selectedYears.length === 1) {
+        // Unselecting the last remaining year resets to all
+        updated = ALL_YEARS;
+      } else {
+        updated = selectedYears.filter((y) => y !== year);
+      }
+    } else {
+      updated = [...selectedYears, year].sort((a, b) => b - a);
+    }
+    setSelectedYears(updated);
+    try {
+      localStorage.setItem('spooktober_selected_years', JSON.stringify(updated));
+    } catch {}
+    generatePicksForDay(selectedDay, true, updated);
+  };
+
+  // Preset selectors
+  const selectAllYears = () => {
+    setSelectedYears(ALL_YEARS);
+    try {
+      localStorage.setItem('spooktober_selected_years', JSON.stringify(ALL_YEARS));
+    } catch {}
+    generatePicksForDay(selectedDay, true, ALL_YEARS);
+  };
+
+  const selectPresetYears = (years: number[]) => {
+    setSelectedYears(years);
+    try {
+      localStorage.setItem('spooktober_selected_years', JSON.stringify(years));
+    } catch {}
+    generatePicksForDay(selectedDay, true, years);
+  };
 
   // Check URL query parameters for shared challenge on mount
   useEffect(() => {
@@ -161,7 +235,12 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         if (decoded.d && Array.isArray(decoded.m)) {
           setSelectedDay(decoded.d);
           if (decoded.y) {
-            setRouletteYearFilter(decoded.y);
+            const parsedY = typeof decoded.y === 'string' 
+              ? decoded.y.split(',').map(Number).filter((n: number) => !isNaN(n))
+              : Array.isArray(decoded.y) ? decoded.y : null;
+            if (parsedY && parsedY.length > 0) {
+              setSelectedYears(parsedY);
+            }
           }
           const matched = decoded.m
             .map((id: string) => allMovies.find((m) => m.id === id))
@@ -184,7 +263,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       console.warn('Could not parse shared challenge from URL', e);
     }
 
-    // Load saved watched status, year filter and selections from localStorage
+    // Load saved watched status and selections from localStorage
     try {
       const savedWatched = localStorage.getItem(`spooktober_watched_day_${selectedDay}`);
       if (savedWatched) {
@@ -193,9 +272,16 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         setWatchedStatus({});
       }
 
-      const savedYear = localStorage.getItem(`spooktober_year_filter_day_${selectedDay}`);
-      if (savedYear) {
-        setRouletteYearFilter(savedYear);
+      const savedYears = localStorage.getItem(`spooktober_years_day_${selectedDay}`);
+      let yearsToUse = selectedYears;
+      if (savedYears) {
+        try {
+          const parsed = JSON.parse(savedYears);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSelectedYears(parsed);
+            yearsToUse = parsed;
+          }
+        } catch {}
       }
 
       const savedPicks = localStorage.getItem(`spooktober_picks_day_${selectedDay}`);
@@ -203,75 +289,44 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         setDailyPicks(JSON.parse(savedPicks));
         setRevealedCount(5);
       } else {
-        generatePicksForDay(selectedDay, false, savedYear || rouletteYearFilter);
+        generatePicksForDay(selectedDay, false, yearsToUse);
       }
     } catch {
-      generatePicksForDay(selectedDay, false, rouletteYearFilter);
+      generatePicksForDay(selectedDay, false, selectedYears);
     }
   }, [selectedDay, allMovies]);
 
-  // Fetch poster thumbnail from Wikipedia REST API for the 5 picks
-  useEffect(() => {
-    dailyPicks.forEach(async (movie) => {
-      if (posters[movie.id] || !movie.wikiUrl) return;
-
-      const slug = movie.wikiUrl.split('/wiki/')[1];
-      if (!slug) return;
-
-      try {
-        const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.thumbnail && data.thumbnail.source) {
-            setPosters(prev => ({ ...prev, [movie.id]: data.thumbnail.source }));
-          }
-        }
-      } catch {
-        // Keep fallback
-      }
-    });
-  }, [dailyPicks]);
-
-  // Generate 5 horror movies for a specific day with optional year filter
-  const generatePicksForDay = (day: number, shouldAnimate = true, yearFilter: string = rouletteYearFilter) => {
+  // High performance movie pick generation with multi-year filter and Fisher-Yates sampling
+  const generatePicksForDay = (day: number, shouldAnimate = true, yearsToUse = selectedYears) => {
     if (allMovies.length < 5) return;
 
-    let targetYear: number | null = null;
-    if (yearFilter !== 'all') {
-      const parsed = parseInt(yearFilter, 10);
-      if (!isNaN(parsed)) {
-        targetYear = parsed;
-      }
-    }
+    const targetYears = yearsToUse && yearsToUse.length > 0 ? yearsToUse : ALL_YEARS;
+    const yearSet = new Set(targetYears);
 
-    // Filter by year if specific year is selected
-    const yearFiltered = targetYear !== null
-      ? allMovies.filter((m) => m.year === targetYear)
-      : allMovies;
+    const yearFiltered = targetYears.length === ALL_YEARS.length
+      ? allMovies
+      : allMovies.filter((m) => yearSet.has(m.year));
 
-    // Filter out movies that have clean titles and preferably directors
     const eligibleMovies = yearFiltered.filter((m) => m.title && m.director && m.director !== 'Desconocido');
     const pool = eligibleMovies.length >= 5 ? eligibleMovies : yearFiltered;
     if (pool.length === 0) return;
 
-    // Seeded selection + randomized shuffle
-    const seed = day * 1337 + (targetYear || 0);
-    const shuffled = [...pool].sort(() => Math.sin(seed + Math.random() * 1000) - 0.5);
+    // Fast Fisher-Yates sampling (O(N) with 0 trig calls)
+    const shuffled = [...pool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
 
-    // Pick 5 movies ensuring diverse years in all-year mode, or unique movies in single-year mode
     const picks: Movie[] = [];
     const usedIds = new Set<string>();
     const usedYears = new Set<number>();
 
+    // Pass 1: Prioritize year diversity across selected years
     for (const movie of shuffled) {
       if (picks.length >= 5) break;
-      if (usedIds.has(movie.id)) continue;
-
-      if (targetYear !== null) {
-        picks.push(movie);
-        usedIds.add(movie.id);
-      } else {
-        if (!usedYears.has(movie.year) || picks.length >= 4) {
+      if (!usedIds.has(movie.id)) {
+        if (!usedYears.has(movie.year) || picks.length >= targetYears.length) {
           picks.push(movie);
           usedIds.add(movie.id);
           usedYears.add(movie.year);
@@ -279,7 +334,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       }
     }
 
-    // Fallback to guarantee 5 picks if needed
+    // Pass 2: Fill remaining up to 5
     if (picks.length < 5) {
       for (const movie of shuffled) {
         if (picks.length >= 5) break;
@@ -295,50 +350,49 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       setRevealedCount(0);
       setDailyPicks(picks);
 
-      // Play tick sounds during spin
       let ticks = 0;
       const spinInterval = setInterval(() => {
         if (soundEnabled) playSpookySound('spin');
         ticks++;
-        if (ticks > 12) clearInterval(spinInterval);
-      }, 100);
+        if (ticks > 10) clearInterval(spinInterval);
+      }, 90);
 
-      // Stop spinning after 1.4s
+      // Fast, punchy reveal sequence
       setTimeout(() => {
         setIsSpinning(false);
         if (soundEnabled) playSpookySound('win');
 
-        // Reveal step-by-step
         for (let i = 1; i <= 5; i++) {
           setTimeout(() => {
             setRevealedCount(i);
             if (soundEnabled) playSpookySound('reveal');
-          }, i * 380);
+          }, i * 260);
         }
-      }, 1400);
+      }, 950);
     } else {
       setDailyPicks(picks);
       setRevealedCount(5);
     }
 
-    // Save to localStorage
     try {
       localStorage.setItem(`spooktober_picks_day_${day}`, JSON.stringify(picks));
-      localStorage.setItem(`spooktober_year_filter_day_${day}`, yearFilter);
-    } catch {
-      // ignore
-    }
+      localStorage.setItem(`spooktober_years_day_${day}`, JSON.stringify(targetYears));
+    } catch {}
   };
 
-  // Toggle watched status
+  // Toggle watched status with instant single-day completed update
   const toggleWatched = (movieId: string) => {
     const updated = { ...watchedStatus, [movieId]: !watchedStatus[movieId] };
     setWatchedStatus(updated);
     try {
       localStorage.setItem(`spooktober_watched_day_${selectedDay}`, JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
+    } catch {}
+
+    const count = Object.values(updated).filter(Boolean).length;
+    setCompletedDays((prev) => ({
+      ...prev,
+      [selectedDay]: count >= 3,
+    }));
   };
 
   // Generate Instagram Story Image on Canvas
@@ -349,7 +403,6 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Instagram Story dimension: 1080 x 1920
     canvas.width = 1080;
     canvas.height = 1920;
 
@@ -358,10 +411,8 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     bg.src = storyBgImage;
 
     bg.onload = () => {
-      // 1. Draw gothic background
       ctx.drawImage(bg, 0, 0, 1080, 1920);
 
-      // 2. Add subtle dark gradient overlay in center for ultra sharp readability
       const grad = ctx.createLinearGradient(0, 400, 0, 1500);
       grad.addColorStop(0, 'rgba(10, 10, 15, 0.4)');
       grad.addColorStop(0.5, 'rgba(10, 10, 15, 0.75)');
@@ -369,15 +420,13 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       ctx.fillStyle = grad;
       ctx.fillRect(100, 440, 880, 1050);
 
-      // 3. Draw Header Title
       ctx.textAlign = 'center';
       ctx.font = 'bold 36px monospace';
-      ctx.fillStyle = '#F97316'; // Pumpkin orange
+      ctx.fillStyle = '#F97316';
       ctx.shadowColor = 'rgba(249, 115, 22, 0.8)';
       ctx.shadowBlur = 18;
       ctx.fillText('🎃 SPOOKTOBER 31-DAY HORROR CHALLENGE 🎃', 540, 360);
 
-      // Subtitle
       ctx.font = '900 64px sans-serif';
       ctx.fillStyle = '#FFFFFF';
       ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
@@ -387,12 +436,13 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       ctx.font = '600 28px sans-serif';
       ctx.fillStyle = '#D1D5DB';
       ctx.shadowBlur = 0;
-      const subtitleText = rouletteYearFilter !== 'all' 
-        ? `Edición Terror del Año ${rouletteYearFilter}` 
-        : 'Maratón de 5 Películas de Terror (2000-2026)';
+      const subtitleText = isAllYearsSelected
+        ? 'Maratón de 5 Películas de Terror (2000-2026)'
+        : selectedYears.length === 1
+        ? `Edición Terror del Año ${selectedYears[0]}`
+        : `Edición Terror (${selectedYears.length} Años: ${selectedYears.slice(0, 3).join(', ')}${selectedYears.length > 3 ? '...' : ''})`;
       ctx.fillText(subtitleText, 540, 490);
 
-      // 4. Draw Movie Rows
       const startY = 570;
       const rowHeight = 170;
 
@@ -400,7 +450,6 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         const y = startY + index * rowHeight;
         const isWatched = !!watchedStatus[movie.id];
 
-        // Row Card Background
         ctx.fillStyle = isWatched ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255, 255, 255, 0.06)';
         ctx.strokeStyle = isWatched ? '#EF4444' : 'rgba(255, 255, 255, 0.15)';
         ctx.lineWidth = 2;
@@ -409,7 +458,6 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         ctx.fill();
         ctx.stroke();
 
-        // Checkbox icon
         ctx.textAlign = 'left';
         ctx.font = 'bold 44px sans-serif';
         if (isWatched) {
@@ -420,7 +468,6 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
           ctx.fillText('☐', 170, y + 84);
         }
 
-        // Movie Title
         ctx.font = 'bold 36px sans-serif';
         ctx.fillStyle = '#FFFFFF';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
@@ -432,7 +479,6 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         }
         ctx.fillText(titleText, 230, y + 60);
 
-        // Metadata: Year, Director & Subgenre
         ctx.shadowBlur = 0;
         ctx.font = '500 24px monospace';
         ctx.fillStyle = '#F97316';
@@ -445,7 +491,6 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         ctx.fillText(truncatedMeta, 330, y + 105);
       });
 
-      // 5. Footer Watermark & Challenge instructions
       ctx.textAlign = 'center';
       if (isDaySuperado) {
         ctx.font = 'bold 32px sans-serif';
@@ -465,14 +510,12 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       ctx.fillStyle = '#9CA3AF';
       ctx.fillText('Generado en Portfolius • Creado por Jorge Chávez (@kubos777)', 540, 1580);
 
-      // Convert to Image URL
       const dataUrl = canvas.toDataURL('image/png');
       setGeneratedStoryUrl(dataUrl);
       setShowStoryModal(true);
     };
   };
 
-  // Download the story card
   const handleDownloadImage = () => {
     if (!generatedStoryUrl) return;
     const a = document.createElement('a');
@@ -483,14 +526,13 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     a.remove();
   };
 
-  // Share Permalink (Instagram bio, WhatsApp, Facebook, etc.)
   const handleSharePermalink = () => {
     if (dailyPicks.length === 0) return;
     const challengeData = {
       d: selectedDay,
       m: dailyPicks.map((p) => p.id),
       w: dailyPicks.map((p) => (watchedStatus[p.id] ? 1 : 0)),
-      y: rouletteYearFilter
+      y: selectedYears.join(',')
     };
     const token = btoa(unescape(encodeURIComponent(JSON.stringify(challengeData))));
     const shareUrl = `${window.location.origin}/horror-movies?challenge=${token}`;
@@ -635,33 +677,31 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         </div>
       </div>
 
-      {/* Roulette Spinning Area & Year Filter Controls */}
+      {/* Roulette Spinning Area & Multi-Year Filter Controls */}
       <div className="relative z-10 my-8 text-center space-y-6">
-        {/* Year Filter Controls */}
-        <div className="max-w-xl mx-auto p-4 rounded-2xl bg-[#0B0914]/90 border border-orange-500/30 shadow-[0_0_25px_rgba(249,115,22,0.15)] backdrop-blur-sm space-y-3">
+        {/* Multi-Year Filter Controls */}
+        <div className="max-w-2xl mx-auto p-4 sm:p-5 rounded-2xl bg-[#0B0914]/95 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.15)] backdrop-blur-md space-y-4 text-left">
+          {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="flex items-center gap-1.5 text-orange-400 font-bold font-mono">
               <Filter className="w-3.5 h-3.5" />
-              Filtro por Año para el Giro:
+              <span>Filtro Multi-Año para la Ruleta:</span>
             </span>
-            <span className="text-[11px] text-gray-400 font-mono">
-              {rouletteYearFilter === 'all' 
-                ? 'Todos los Años (2000–2026 • 3,088 filmes)' 
-                : `Año ${rouletteYearFilter} • ${filmsCountByYear[parseInt(rouletteYearFilter, 10)] || 0} filmes`}
+            <span className="text-[11px] font-mono text-orange-200/90 bg-orange-950/80 px-2.5 py-1 rounded-full border border-orange-500/30">
+              {isAllYearsSelected
+                ? 'Todos los Años (3,088 filmes)'
+                : `${selectedYears.length} ${selectedYears.length === 1 ? 'Año Seleccionado' : 'Años Seleccionados'} • ${selectedYearsMoviesCount} filmes`}
             </span>
           </div>
 
-          {/* Quick Year Pill Selectors */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {/* Quick Presets */}
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() => {
-                setRouletteYearFilter('all');
-                generatePicksForDay(selectedDay, true, 'all');
-              }}
+              onClick={selectAllYears}
               disabled={isSpinning}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1 ${
-                rouletteYearFilter === 'all'
+                isAllYearsSelected
                   ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
                   : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
               }`}
@@ -672,13 +712,10 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
 
             <button
               type="button"
-              onClick={() => {
-                setRouletteYearFilter('2026');
-                generatePicksForDay(selectedDay, true, '2026');
-              }}
+              onClick={() => selectPresetYears([2026])}
               disabled={isSpinning}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
-                rouletteYearFilter === '2026'
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                selectedYears.length === 1 && selectedYears.includes(2026)
                   ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
                   : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
               }`}
@@ -686,47 +723,98 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
               🎃 2026 (Estrenos)
             </button>
 
-            {['2025', '2024', '2023', '2022', '2021'].map((yr) => (
-              <button
-                key={yr}
-                type="button"
-                onClick={() => {
-                  setRouletteYearFilter(yr);
-                  generatePicksForDay(selectedDay, true, yr);
-                }}
-                disabled={isSpinning}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
-                  rouletteYearFilter === yr
-                    ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
-                    : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
-                }`}
-              >
-                {yr}
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => selectPresetYears([2026, 2025, 2024, 2023, 2022])}
+              disabled={isSpinning}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                selectedYears.length === 5 && selectedYears.includes(2026) && selectedYears.includes(2022)
+                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
+                  : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
+            >
+              ⭐ Últimos 5 Años
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selectPresetYears([2026, 2025, 2024, 2023, 2022, 2021, 2020])}
+              disabled={isSpinning}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                selectedYears.length === 7 && selectedYears.includes(2020)
+                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
+                  : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
+            >
+              🔥 2020s
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selectPresetYears([2019, 2018, 2017, 2016, 2015, 2014, 2013, 2012, 2011, 2010])}
+              disabled={isSpinning}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                selectedYears.length === 10 && selectedYears.includes(2010)
+                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
+                  : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
+            >
+              ⚡ 2010s
+            </button>
+
+            <button
+              type="button"
+              onClick={() => selectPresetYears([2009, 2008, 2007, 2006, 2005, 2004, 2003, 2002, 2001, 2000])}
+              disabled={isSpinning}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                selectedYears.length === 10 && selectedYears.includes(2000)
+                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
+                  : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
+            >
+              📼 2000s
+            </button>
           </div>
 
-          {/* Specific Year Dropdown Selector (2000 to 2026) */}
-          <div className="flex items-center gap-2 pt-2 border-t border-white/5">
-            <span className="text-[11px] text-gray-400 font-mono whitespace-nowrap">O filtra cualquier año:</span>
-            <select
-              value={rouletteYearFilter}
-              onChange={(e) => {
-                const val = e.target.value;
-                setRouletteYearFilter(val);
-                generatePicksForDay(selectedDay, true, val);
-              }}
-              disabled={isSpinning}
-              className="flex-1 bg-[#141120] text-white text-xs font-mono font-semibold py-1.5 px-3 rounded-lg border border-orange-500/40 focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 cursor-pointer"
-              id="roulette-year-select"
-            >
-              <option value="all">🎬 Todos los Años (2000–2026) • 3,088 filmes</option>
-              {availableYears.map((yr) => (
-                <option key={yr} value={yr.toString()}>
-                  {yr === 2026 ? '🎃 2026 (Por Estrenar)' : `Año ${yr}`} • {filmsCountByYear[yr] || 0} películas
-                </option>
-              ))}
-            </select>
+          {/* Interactive Multi-Select Year Pills (2026 -> 2000) */}
+          <div className="space-y-1.5 pt-2 border-t border-white/5">
+            <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono">
+              <span className="flex items-center gap-1">
+                <Layers className="w-3 h-3 text-orange-400" />
+                Haz clic en cualquier año para agregarlo o quitarlo:
+              </span>
+              <button
+                type="button"
+                onClick={selectAllYears}
+                className="text-orange-400 hover:text-orange-300 underline font-mono text-[11px]"
+              >
+                Seleccionar todos
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 max-h-36 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-orange-900/50">
+              {ALL_YEARS.map((yr) => {
+                const isSelected = selectedYears.includes(yr);
+                const count = filmsCountByYear[yr] || 0;
+                return (
+                  <button
+                    key={yr}
+                    type="button"
+                    onClick={() => toggleYear(yr)}
+                    disabled={isSpinning}
+                    className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1 border ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white border-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.4)]'
+                        : 'bg-white/5 text-gray-400 hover:text-white border-white/5 hover:border-white/15'
+                    }`}
+                    title={`Año ${yr}: ${count} películas (${isSelected ? 'Activo' : 'Inactivo'})`}
+                  >
+                    <span>{yr === 2026 ? '🎃 2026' : yr}</span>
+                    <span className="text-[9px] opacity-75 font-normal">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -741,7 +829,11 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
                   <Skull className="w-6 h-6 text-orange-400 animate-pulse" />
                   <span className="text-[10px] font-mono text-gray-300 font-bold mt-1">DÍA {selectedDay}</span>
                   <span className="text-[8px] font-mono font-extrabold text-orange-400 truncate max-w-[80px]">
-                    {rouletteYearFilter === 'all' ? '2000–2026' : `Año ${rouletteYearFilter}`}
+                    {isAllYearsSelected 
+                      ? '2000–2026' 
+                      : selectedYears.length === 1 
+                      ? `Año ${selectedYears[0]}` 
+                      : `${selectedYears.length} Años`}
                   </span>
                 </div>
               </div>
@@ -764,7 +856,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             <span>
               {isSpinning 
                 ? 'Invocando Películas...' 
-                : `Girar Ruleta del Día ${selectedDay} ${rouletteYearFilter === 'all' ? '(Todos los Años)' : `(Año ${rouletteYearFilter})`}`}
+                : `Girar Ruleta del Día ${selectedDay} (${isAllYearsSelected ? 'Todos los Años' : `${selectedYears.length} Años Seleccionados`})`}
             </span>
           </button>
         </div>
@@ -808,7 +900,6 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
           {dailyPicks.map((movie, index) => {
             const isRevealed = index < revealedCount;
             const isWatched = !!watchedStatus[movie.id];
-            const posterUrl = posters[movie.id];
 
             if (!isRevealed) {
               return (
@@ -832,28 +923,18 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
                     : 'bg-[#120F1D]/80 border-orange-950/70 hover:border-orange-500/40 shadow-lg'
                 }`}
               >
-                {/* Movie Poster Preview */}
+                {/* Movie Poster Preview with 100% Guaranteed Covers */}
                 <div 
-                  className="h-44 relative bg-black/60 overflow-hidden cursor-pointer group"
+                  className="h-48 relative bg-black/80 overflow-hidden cursor-pointer group"
                   onClick={() => onSelectMovie(movie)}
                 >
-                  {posterUrl ? (
-                    <img 
-                      src={posterUrl} 
-                      alt={movie.title} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-t from-black to-orange-950/40 text-center">
-                      <Film className="w-8 h-8 text-orange-400/60 mb-2" />
-                      <span className="text-xs font-bold text-gray-300 line-clamp-2">{movie.title}</span>
-                    </div>
-                  )}
-
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#120F1D] via-transparent to-black/60" />
+                  <MoviePoster 
+                    movie={movie} 
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
 
                   {/* Top Badges */}
-                  <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between">
+                  <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-orange-600/90 text-white shadow">
                       #{index + 1}
                     </span>

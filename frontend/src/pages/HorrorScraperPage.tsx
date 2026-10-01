@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Film, 
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import horrorData from '../data/horror_movies.json';
 import HalloweenRoulette from '../components/HalloweenRoulette';
+import MoviePoster from '../components/MoviePoster';
 
 interface Movie {
   id: string;
@@ -29,6 +30,20 @@ interface Movie {
   subgenre: string;
   wikiUrl: string;
 }
+
+interface IndexedMovie extends Movie {
+  _corpus: string;
+  _genreLower: string;
+  _countryLower: string;
+}
+
+// Pre-compute lowercased search index once to eliminate runtime string allocation overhead
+const indexedFilms: IndexedMovie[] = (horrorData.films as Movie[]).map((m) => ({
+  ...m,
+  _corpus: `${m.title} ${m.director} ${m.cast}`.toLowerCase(),
+  _genreLower: (m.subgenre || '').toLowerCase(),
+  _countryLower: (m.country || '').toLowerCase(),
+}));
 
 const ITEMS_PER_PAGE = 24;
 
@@ -46,7 +61,6 @@ export default function HorrorScraperPage() {
   // Poster cache for modal view
   const [modalPoster, setModalPoster] = useState<string | null>(null);
   const [modalSynopsis, setModalSynopsis] = useState<string | null>(null);
-  const [isLoadingPoster, setIsLoadingPoster] = useState<boolean>(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -63,7 +77,6 @@ export default function HorrorScraperPage() {
     const slug = selectedMovie.wikiUrl.split('/wiki/')[1];
     if (!slug) return;
 
-    setIsLoadingPoster(true);
     fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -83,9 +96,6 @@ export default function HorrorScraperPage() {
       .catch(() => {
         setModalPoster(null);
         setModalSynopsis(null);
-      })
-      .finally(() => {
-        setIsLoadingPoster(false);
       });
   }, [selectedMovie]);
 
@@ -129,53 +139,29 @@ export default function HorrorScraperPage() {
     };
   }, []);
 
-  // Filter and sort movies
+  const deferredSearch = useDeferredValue(searchQuery);
+
+  // High-performance filter and sort using pre-computed search corpus
   const filteredMovies = useMemo(() => {
-    return horrorData.films
-      .filter((m: Movie) => {
-        // Upcoming filter
-        if (onlyUpcoming && m.year !== 2026) {
-          return false;
-        }
+    const q = deferredSearch.trim().toLowerCase();
+    const genreFilter = selectedGenre !== 'all' ? selectedGenre.toLowerCase() : null;
+    const countryFilter = selectedCountry !== 'all' ? selectedCountry.toLowerCase() : null;
 
-        // Year filter
-        if (selectedYear !== 'all' && m.year !== selectedYear) {
-          return false;
-        }
-
-        // Genre filter
-        if (selectedGenre !== 'all') {
-          const movieGenre = (m.subgenre || '').toLowerCase();
-          if (!movieGenre.includes(selectedGenre.toLowerCase())) {
-            return false;
-          }
-        }
-
-        // Country filter
-        if (selectedCountry !== 'all') {
-          const movieCountry = (m.country || '').toLowerCase();
-          if (!movieCountry.includes(selectedCountry.toLowerCase())) {
-            return false;
-          }
-        }
-
-        // Search query (title, director, cast)
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const inTitle = m.title.toLowerCase().includes(q);
-          const inDirector = m.director.toLowerCase().includes(q);
-          const inCast = m.cast.toLowerCase().includes(q);
-          return inTitle || inDirector || inCast;
-        }
-
+    return indexedFilms
+      .filter((m) => {
+        if (onlyUpcoming && m.year !== 2026) return false;
+        if (selectedYear !== 'all' && m.year !== selectedYear) return false;
+        if (genreFilter && !m._genreLower.includes(genreFilter)) return false;
+        if (countryFilter && !m._countryLower.includes(countryFilter)) return false;
+        if (q && !m._corpus.includes(q)) return false;
         return true;
       })
-      .sort((a: Movie, b: Movie) => {
+      .sort((a, b) => {
         if (sortBy === 'newest') return b.year - a.year || a.title.localeCompare(b.title);
         if (sortBy === 'oldest') return a.year - b.year || a.title.localeCompare(b.title);
         return a.title.localeCompare(b.title);
       });
-  }, [selectedYear, selectedGenre, selectedCountry, searchQuery, sortBy, onlyUpcoming]);
+  }, [selectedYear, selectedGenre, selectedCountry, deferredSearch, sortBy, onlyUpcoming]);
 
   // Reset pagination on filter change
   useEffect(() => {
@@ -488,61 +474,66 @@ export default function HorrorScraperPage() {
                     <div
                       key={movie.id}
                       onClick={() => setSelectedMovie(movie)}
-                      className="group relative flex flex-col justify-between p-4 rounded-2xl bg-[#0E0C16]/80 border border-orange-950/60 hover:border-orange-500/50 hover:bg-[#13101E] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-[0_8px_30px_rgba(249,115,22,0.15)]"
+                      className="group relative flex flex-col justify-between rounded-2xl bg-[#0E0C16]/80 border border-orange-950/60 hover:border-orange-500/50 hover:bg-[#13101E] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-[0_8px_30px_rgba(249,115,22,0.15)] overflow-hidden"
                     >
-                      <div>
-                        {/* Top Badges */}
-                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                      {/* Movie Poster Cover (Guaranteed 100% covers) */}
+                      <div className="h-48 relative overflow-hidden bg-black/80">
+                        <MoviePoster movie={movie} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
                           <span
-                            className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${
+                            className={`font-mono text-xs font-bold px-2 py-0.5 rounded shadow ${
                               isUpcoming
-                                ? 'bg-orange-600 text-white shadow-[0_0_8px_rgba(249,115,22,0.6)]'
-                                : 'bg-black/60 border border-orange-900/40 text-orange-400'
+                                ? 'bg-orange-600 text-white'
+                                : 'bg-black/80 border border-orange-900/60 text-orange-400'
                             }`}
                           >
                             {movie.year}
                           </span>
 
                           {isUpcoming ? (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-950 text-orange-400 border border-orange-500/30 flex items-center gap-1">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-950 text-orange-400 border border-orange-500/30 flex items-center gap-1 shadow">
                               <span>🎃</span>
                               <span>Por Estrenar</span>
                             </span>
                           ) : (
-                            <span className="text-[11px] text-gray-400 truncate max-w-[140px] text-right">
+                            <span className="text-[10px] text-gray-300 bg-black/80 px-2 py-0.5 rounded truncate max-w-[120px] text-right font-mono">
                               {movie.country || 'Desconocido'}
                             </span>
                           )}
                         </div>
-
-                        {/* Title */}
-                        <h3 className="text-base font-bold text-white group-hover:text-orange-300 transition-colors line-clamp-2 mb-2">
-                          {movie.title}
-                        </h3>
-
-                        {/* Details */}
-                        <div className="space-y-1.5 text-xs text-gray-400 mb-3">
-                          <div className="flex items-center gap-1.5">
-                            <Clapperboard className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                            <span className="truncate">Dir: {movie.director || 'Desconocido'}</span>
-                          </div>
-                          {movie.cast && movie.cast !== 'N/A' && (
-                            <div className="flex items-center gap-1.5">
-                              <Users className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                              <span className="truncate">{movie.cast}</span>
-                            </div>
-                          )}
-                        </div>
                       </div>
 
-                      {/* Footer Subgenre */}
-                      <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 border border-white/5 text-gray-300 truncate max-w-[140px]">
-                          {movie.subgenre || 'Horror'}
-                        </span>
-                        <span className="text-xs text-orange-400 group-hover:translate-x-1 transition-transform flex items-center gap-1 font-semibold">
-                          Ficha →
-                        </span>
+                      <div className="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                          {/* Title */}
+                          <h3 className="text-base font-bold text-white group-hover:text-orange-300 transition-colors line-clamp-2 mb-2">
+                            {movie.title}
+                          </h3>
+
+                          {/* Details */}
+                          <div className="space-y-1.5 text-xs text-gray-400 mb-3">
+                            <div className="flex items-center gap-1.5">
+                              <Clapperboard className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                              <span className="truncate">Dir: {movie.director || 'Desconocido'}</span>
+                            </div>
+                            {movie.cast && movie.cast !== 'N/A' && (
+                              <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                                <span className="truncate">{movie.cast}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Footer Subgenre */}
+                        <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 border border-white/5 text-gray-300 truncate max-w-[140px]">
+                            {movie.subgenre || 'Horror'}
+                          </span>
+                          <span className="text-xs text-orange-400 group-hover:translate-x-1 transition-transform flex items-center gap-1 font-semibold">
+                            Ficha →
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -598,21 +589,9 @@ export default function HorrorScraperPage() {
 
             {/* Poster & Header Split */}
             <div className="flex flex-col sm:flex-row gap-5">
-              {/* Poster Preview */}
-              <div className="w-full sm:w-40 h-56 rounded-2xl overflow-hidden bg-black/60 border border-white/10 shrink-0 relative flex items-center justify-center shadow-lg">
-                {isLoadingPoster ? (
-                  <div className="text-center p-3 animate-pulse">
-                    <Film className="w-8 h-8 text-orange-400 mx-auto mb-2" />
-                    <span className="text-[10px] text-gray-500 font-mono">Buscando carátula...</span>
-                  </div>
-                ) : modalPoster ? (
-                  <img src={modalPoster} alt={selectedMovie.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-center p-3">
-                    <Film className="w-8 h-8 text-orange-400/50 mx-auto mb-2" />
-                    <span className="text-[10px] text-gray-500 font-mono">Carátula no disponible</span>
-                  </div>
-                )}
+              {/* Poster Preview with Guaranteed Cover */}
+              <div className="w-full sm:w-44 h-60 rounded-2xl overflow-hidden bg-black/80 border border-orange-500/30 shrink-0 relative shadow-2xl">
+                <MoviePoster movie={selectedMovie} posterUrl={modalPoster} className="w-full h-full object-cover" />
               </div>
 
               {/* Title & Badges */}
