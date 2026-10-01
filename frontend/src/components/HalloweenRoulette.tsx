@@ -16,7 +16,9 @@ import {
   Check,
   Tv,
   ExternalLink,
-  Trophy
+  Trophy,
+  Filter,
+  Sparkles
 } from 'lucide-react';
 import storyBgImage from '../assets/halloween_story_bg.jpg';
 
@@ -109,8 +111,24 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
   const [posters, setPosters] = useState<Record<string, string>>({});
   const [isSharedView, setIsSharedView] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [rouletteYearFilter, setRouletteYearFilter] = useState<string>('all');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Available years list (descending 2026 -> 2000)
+  const availableYears = useMemo(() => {
+    const years = Array.from(new Set(allMovies.map((m) => m.year))).sort((a, b) => b - a);
+    return years;
+  }, [allMovies]);
+
+  // Total films count per year
+  const filmsCountByYear = useMemo(() => {
+    const counts: Record<number, number> = {};
+    allMovies.forEach((m) => {
+      counts[m.year] = (counts[m.year] || 0) + 1;
+    });
+    return counts;
+  }, [allMovies]);
 
   // Compute completed days (where user marked at least 3 out of 5 movies)
   const completedDays = useMemo(() => {
@@ -142,6 +160,9 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         const decoded = JSON.parse(decodeURIComponent(escape(atob(challengeToken))));
         if (decoded.d && Array.isArray(decoded.m)) {
           setSelectedDay(decoded.d);
+          if (decoded.y) {
+            setRouletteYearFilter(decoded.y);
+          }
           const matched = decoded.m
             .map((id: string) => allMovies.find((m) => m.id === id))
             .filter(Boolean) as Movie[];
@@ -163,7 +184,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       console.warn('Could not parse shared challenge from URL', e);
     }
 
-    // Load saved watched status and selections from localStorage
+    // Load saved watched status, year filter and selections from localStorage
     try {
       const savedWatched = localStorage.getItem(`spooktober_watched_day_${selectedDay}`);
       if (savedWatched) {
@@ -172,15 +193,20 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         setWatchedStatus({});
       }
 
+      const savedYear = localStorage.getItem(`spooktober_year_filter_day_${selectedDay}`);
+      if (savedYear) {
+        setRouletteYearFilter(savedYear);
+      }
+
       const savedPicks = localStorage.getItem(`spooktober_picks_day_${selectedDay}`);
       if (savedPicks) {
         setDailyPicks(JSON.parse(savedPicks));
         setRevealedCount(5);
       } else {
-        generatePicksForDay(selectedDay, false);
+        generatePicksForDay(selectedDay, false, savedYear || rouletteYearFilter);
       }
     } catch {
-      generatePicksForDay(selectedDay, false);
+      generatePicksForDay(selectedDay, false, rouletteYearFilter);
     }
   }, [selectedDay, allMovies]);
 
@@ -206,27 +232,61 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     });
   }, [dailyPicks]);
 
-  // Generate 5 horror movies for a specific day
-  const generatePicksForDay = (day: number, shouldAnimate = true) => {
+  // Generate 5 horror movies for a specific day with optional year filter
+  const generatePicksForDay = (day: number, shouldAnimate = true, yearFilter: string = rouletteYearFilter) => {
     if (allMovies.length < 5) return;
 
+    let targetYear: number | null = null;
+    if (yearFilter !== 'all') {
+      const parsed = parseInt(yearFilter, 10);
+      if (!isNaN(parsed)) {
+        targetYear = parsed;
+      }
+    }
+
+    // Filter by year if specific year is selected
+    const yearFiltered = targetYear !== null
+      ? allMovies.filter((m) => m.year === targetYear)
+      : allMovies;
+
     // Filter out movies that have clean titles and preferably directors
-    const eligibleMovies = allMovies.filter(m => m.title && m.director && m.director !== 'Desconocido');
-    const pool = eligibleMovies.length > 50 ? eligibleMovies : allMovies;
+    const eligibleMovies = yearFiltered.filter((m) => m.title && m.director && m.director !== 'Desconocido');
+    const pool = eligibleMovies.length >= 5 ? eligibleMovies : yearFiltered;
+    if (pool.length === 0) return;
 
     // Seeded selection + randomized shuffle
-    const seed = day * 1337;
+    const seed = day * 1337 + (targetYear || 0);
     const shuffled = [...pool].sort(() => Math.sin(seed + Math.random() * 1000) - 0.5);
 
-    // Pick 5 movies ensuring diverse years & subgenres
+    // Pick 5 movies ensuring diverse years in all-year mode, or unique movies in single-year mode
     const picks: Movie[] = [];
+    const usedIds = new Set<string>();
     const usedYears = new Set<number>();
 
     for (const movie of shuffled) {
       if (picks.length >= 5) break;
-      if (!usedYears.has(movie.year) || picks.length >= 4) {
+      if (usedIds.has(movie.id)) continue;
+
+      if (targetYear !== null) {
         picks.push(movie);
-        usedYears.add(movie.year);
+        usedIds.add(movie.id);
+      } else {
+        if (!usedYears.has(movie.year) || picks.length >= 4) {
+          picks.push(movie);
+          usedIds.add(movie.id);
+          usedYears.add(movie.year);
+        }
+      }
+    }
+
+    // Fallback to guarantee 5 picks if needed
+    if (picks.length < 5) {
+      for (const movie of shuffled) {
+        if (picks.length >= 5) break;
+        if (!usedIds.has(movie.id)) {
+          picks.push(movie);
+          usedIds.add(movie.id);
+        }
       }
     }
 
@@ -264,6 +324,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     // Save to localStorage
     try {
       localStorage.setItem(`spooktober_picks_day_${day}`, JSON.stringify(picks));
+      localStorage.setItem(`spooktober_year_filter_day_${day}`, yearFilter);
     } catch {
       // ignore
     }
@@ -326,7 +387,10 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       ctx.font = '600 28px sans-serif';
       ctx.fillStyle = '#D1D5DB';
       ctx.shadowBlur = 0;
-      ctx.fillText('Maratón de 5 Películas de Terror', 540, 490);
+      const subtitleText = rouletteYearFilter !== 'all' 
+        ? `Edición Terror del Año ${rouletteYearFilter}` 
+        : 'Maratón de 5 Películas de Terror (2000-2026)';
+      ctx.fillText(subtitleText, 540, 490);
 
       // 4. Draw Movie Rows
       const startY = 570;
@@ -426,6 +490,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       d: selectedDay,
       m: dailyPicks.map((p) => p.id),
       w: dailyPicks.map((p) => (watchedStatus[p.id] ? 1 : 0)),
+      y: rouletteYearFilter
     };
     const token = btoa(unescape(encodeURIComponent(JSON.stringify(challengeData))));
     const shareUrl = `${window.location.origin}/horror-movies?challenge=${token}`;
@@ -570,10 +635,103 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         </div>
       </div>
 
-      {/* Roulette Spinning Area */}
-      <div className="relative z-10 my-8 text-center">
+      {/* Roulette Spinning Area & Year Filter Controls */}
+      <div className="relative z-10 my-8 text-center space-y-6">
+        {/* Year Filter Controls */}
+        <div className="max-w-xl mx-auto p-4 rounded-2xl bg-[#0B0914]/90 border border-orange-500/30 shadow-[0_0_25px_rgba(249,115,22,0.15)] backdrop-blur-sm space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="flex items-center gap-1.5 text-orange-400 font-bold font-mono">
+              <Filter className="w-3.5 h-3.5" />
+              Filtro por Año para el Giro:
+            </span>
+            <span className="text-[11px] text-gray-400 font-mono">
+              {rouletteYearFilter === 'all' 
+                ? 'Todos los Años (2000–2026 • 3,088 filmes)' 
+                : `Año ${rouletteYearFilter} • ${filmsCountByYear[parseInt(rouletteYearFilter, 10)] || 0} filmes`}
+            </span>
+          </div>
+
+          {/* Quick Year Pill Selectors */}
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setRouletteYearFilter('all');
+                generatePicksForDay(selectedDay, true, 'all');
+              }}
+              disabled={isSpinning}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1 ${
+                rouletteYearFilter === 'all'
+                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
+                  : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>Todos (2000–2026)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setRouletteYearFilter('2026');
+                generatePicksForDay(selectedDay, true, '2026');
+              }}
+              disabled={isSpinning}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                rouletteYearFilter === '2026'
+                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
+                  : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
+            >
+              🎃 2026 (Estrenos)
+            </button>
+
+            {['2025', '2024', '2023', '2022', '2021'].map((yr) => (
+              <button
+                key={yr}
+                type="button"
+                onClick={() => {
+                  setRouletteYearFilter(yr);
+                  generatePicksForDay(selectedDay, true, yr);
+                }}
+                disabled={isSpinning}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                  rouletteYearFilter === yr
+                    ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-[0_0_12px_rgba(249,115,22,0.6)]'
+                    : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+                }`}
+              >
+                {yr}
+              </button>
+            ))}
+          </div>
+
+          {/* Specific Year Dropdown Selector (2000 to 2026) */}
+          <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+            <span className="text-[11px] text-gray-400 font-mono whitespace-nowrap">O filtra cualquier año:</span>
+            <select
+              value={rouletteYearFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setRouletteYearFilter(val);
+                generatePicksForDay(selectedDay, true, val);
+              }}
+              disabled={isSpinning}
+              className="flex-1 bg-[#141120] text-white text-xs font-mono font-semibold py-1.5 px-3 rounded-lg border border-orange-500/40 focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 cursor-pointer"
+              id="roulette-year-select"
+            >
+              <option value="all">🎬 Todos los Años (2000–2026) • 3,088 filmes</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr.toString()}>
+                  {yr === 2026 ? '🎃 2026 (Por Estrenar)' : `Año ${yr}`} • {filmsCountByYear[yr] || 0} películas
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Wheel Graphic */}
         <div className="max-w-md mx-auto relative flex flex-col items-center">
-          {/* Wheel Graphic */}
           <div className="relative w-48 h-48 sm:w-56 sm:h-56 mb-6">
             <div className={`w-full h-full rounded-full border-4 border-orange-500/80 p-2 shadow-[0_0_35px_rgba(249,115,22,0.4)] ${
               isSpinning ? 'animate-spin' : ''
@@ -582,6 +740,9 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
                 <div className="w-24 h-24 rounded-full bg-[#0E0C17] border-2 border-orange-400/60 flex flex-col items-center justify-center text-center p-2 shadow-inner">
                   <Skull className="w-6 h-6 text-orange-400 animate-pulse" />
                   <span className="text-[10px] font-mono text-gray-300 font-bold mt-1">DÍA {selectedDay}</span>
+                  <span className="text-[8px] font-mono font-extrabold text-orange-400 truncate max-w-[80px]">
+                    {rouletteYearFilter === 'all' ? '2000–2026' : `Año ${rouletteYearFilter}`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -600,7 +761,11 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             id="spin-roulette-btn"
           >
             <RotateCw className={`w-4 h-4 ${isSpinning ? 'animate-spin' : 'group-hover:rotate-180 transition-transform'}`} />
-            <span>{isSpinning ? 'Invocando Películas...' : `Girar Ruleta del Día ${selectedDay}`}</span>
+            <span>
+              {isSpinning 
+                ? 'Invocando Películas...' 
+                : `Girar Ruleta del Día ${selectedDay} ${rouletteYearFilter === 'all' ? '(Todos los Años)' : `(Año ${rouletteYearFilter})`}`}
+            </span>
           </button>
         </div>
       </div>
