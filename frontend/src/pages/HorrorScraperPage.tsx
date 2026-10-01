@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Film, 
@@ -8,18 +8,13 @@ import {
   Tag, 
   ExternalLink, 
   ArrowLeft, 
-  Filter, 
   Clapperboard, 
   Users, 
   X, 
-  Layers,
-  ChevronLeft,
-  ChevronRight,
-  Flame,
-  Sparkles,
-  Clock,
-  Compass,
-  Code2
+  ChevronLeft, 
+  ChevronRight, 
+  Code2,
+  Tv
 } from 'lucide-react';
 import horrorData from '../data/horror_movies.json';
 import HalloweenRoulette from '../components/HalloweenRoulette';
@@ -663,6 +658,54 @@ export default function HorrorScraperPage() {
                 <p>{modalSynopsis}</p>
               </div>
             )}
+
+            {/* Streaming Platforms Section */}
+            <div className="p-4 rounded-2xl bg-black/50 border border-orange-500/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-orange-400 flex items-center gap-1.5 font-mono">
+                  <Tv className="w-3.5 h-3.5 text-orange-400" />
+                  ¿Dónde ver en Streaming?
+                </span>
+                <span className="text-[10px] text-gray-500 font-mono">
+                  (Netflix, Prime, Max, Shudder, etc.)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <a
+                  href={`https://www.justwatch.com/mx/buscar?q=${encodeURIComponent(selectedMovie.title)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-orange-600/90 hover:bg-orange-600 text-white text-xs font-bold shadow-[0_0_10px_rgba(249,115,22,0.3)] transition-all"
+                  title="Ver catálogo de streaming disponible en tu país en JustWatch"
+                >
+                  <span>JustWatch (Catálogo)</span>
+                  <ExternalLink className="w-3 h-3 opacity-70" />
+                </a>
+
+                <a
+                  href={`https://www.shudder.com/search?q=${encodeURIComponent(selectedMovie.title)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-300 text-xs font-bold transition-all"
+                  title="Buscar en Shudder (Streaming de Terror)"
+                >
+                  <span>Shudder (Terror)</span>
+                  <ExternalLink className="w-3 h-3 opacity-70" />
+                </a>
+
+                <a
+                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(selectedMovie.title + ' ' + selectedMovie.year + ' pelicula completa')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-gray-200 text-xs font-bold border border-white/10 transition-all"
+                  title="Buscar en YouTube Películas y Google Play"
+                >
+                  <span>YouTube / Google TV</span>
+                  <ExternalLink className="w-3 h-3 opacity-70" />
+                </a>
+              </div>
+            </div>
 
             {/* Actions */}
             <div className="flex flex-wrap items-center gap-3 pt-2">

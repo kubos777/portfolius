@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   RotateCw, 
   CheckCircle2, 
@@ -13,7 +13,10 @@ import {
   VolumeX, 
   X,
   Link2,
-  Check
+  Check,
+  Tv,
+  ExternalLink,
+  Trophy
 } from 'lucide-react';
 import storyBgImage from '../assets/halloween_story_bg.jpg';
 
@@ -85,7 +88,17 @@ function playSpookySound(type: 'spin' | 'reveal' | 'win') {
 }
 
 export default function HalloweenRoulette({ allMovies, onSelectMovie }: HalloweenRouletteProps) {
-  const [selectedDay, setSelectedDay] = useState<number>(1);
+  // Base default day on today's calendar date
+  const getTodayDay = () => {
+    const now = new Date();
+    if (now.getMonth() === 9) {
+      return now.getDate();
+    }
+    return Math.min(Math.max(now.getDate(), 1), 31);
+  };
+
+  const todayDayNumber = getTodayDay();
+  const [selectedDay, setSelectedDay] = useState<number>(getTodayDay);
   const [isSpinning, setIsSpinning] = useState(false);
   const [revealedCount, setRevealedCount] = useState<number>(5);
   const [dailyPicks, setDailyPicks] = useState<Movie[]>([]);
@@ -98,6 +111,27 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
   const [copiedToast, setCopiedToast] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Compute completed days (where user marked at least 3 out of 5 movies)
+  const completedDays = useMemo(() => {
+    const completed: Record<number, boolean> = {};
+    for (let d = 1; d <= 31; d++) {
+      try {
+        const data = localStorage.getItem(`spooktober_watched_day_${d}`);
+        if (data) {
+          const parsed = JSON.parse(data);
+          const count = Object.values(parsed).filter(Boolean).length;
+          if (count >= 3) {
+            completed[d] = true;
+          }
+        }
+      } catch {}
+    }
+    return completed;
+  }, [watchedStatus, selectedDay]);
+
+  const watchedCount = Object.values(watchedStatus).filter(Boolean).length;
+  const isDaySuperado = watchedCount >= 3;
 
   // Check URL query parameters for shared challenge on mount
   useEffect(() => {
@@ -349,13 +383,23 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
 
       // 5. Footer Watermark & Challenge instructions
       ctx.textAlign = 'center';
-      ctx.font = 'bold 26px sans-serif';
-      ctx.fillStyle = '#FBBF24';
-      ctx.fillText('¿Aceptas el reto? Marca las que logres ver y comparte tu progreso!', 540, 1540);
+      if (isDaySuperado) {
+        ctx.font = 'bold 32px sans-serif';
+        ctx.fillStyle = '#34D399';
+        ctx.shadowColor = 'rgba(16, 185, 129, 0.9)';
+        ctx.shadowBlur = 18;
+        ctx.fillText(`🏆 ¡RETO DÍA ${selectedDay} SUPERADO! (${watchedCount}/5 VISTAS) 🏆`, 540, 1530);
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.font = 'bold 26px sans-serif';
+        ctx.fillStyle = '#FBBF24';
+        ctx.shadowBlur = 0;
+        ctx.fillText(`🎃 RETO DÍA ${selectedDay}: ${watchedCount}/5 VISTAS (Mínimo 3 para superar)`, 540, 1530);
+      }
 
       ctx.font = '22px monospace';
       ctx.fillStyle = '#9CA3AF';
-      ctx.fillText('Generado en Portfolius • Creado por Jorge Chávez (@kubos777)', 540, 1585);
+      ctx.fillText('Generado en Portfolius • Creado por Jorge Chávez (@kubos777)', 540, 1580);
 
       // Convert to Image URL
       const dataUrl = canvas.toDataURL('image/png');
@@ -492,18 +536,34 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
         <div className="grid grid-cols-7 sm:grid-cols-11 md:grid-cols-16 lg:grid-cols-31 gap-1.5">
           {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
             const isSelected = selectedDay === day;
+            const isCompleted = !!completedDays[day];
+            const isToday = day === todayDayNumber;
             return (
               <button
                 key={day}
                 onClick={() => setSelectedDay(day)}
                 disabled={isSpinning}
-                className={`py-2 px-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                className={`py-2 px-1 rounded-lg text-xs font-mono font-bold transition-all relative flex flex-col items-center justify-center ${
                   isSelected
-                    ? 'bg-orange-500 text-black shadow-[0_0_12px_rgba(249,115,22,0.8)] scale-110'
+                    ? 'bg-orange-500 text-black shadow-[0_0_12px_rgba(249,115,22,0.8)] scale-110 z-10'
+                    : isCompleted
+                    ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
                     : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/5'
                 }`}
+                title={
+                  isCompleted
+                    ? `Día ${day}: ¡Reto Superado (3+ películas vistas)! 🏆`
+                    : isToday
+                    ? `Día ${day}: ¡Hoy!`
+                    : `Día ${day}`
+                }
               >
-                {day}
+                <span>{day}</span>
+                {isCompleted ? (
+                  <span className="text-[9px] text-emerald-400 font-black leading-none mt-0.5">✓</span>
+                ) : isToday ? (
+                  <span className="text-[7px] text-orange-400 font-extrabold leading-none mt-0.5">HOY</span>
+                ) : null}
               </button>
             );
           })}
@@ -547,15 +607,35 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
 
       {/* Step by Step Daily Movie Picks (5 Movies) */}
       <div className="relative z-10 mt-10">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <span>Las 5 del Día</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-orange-950 text-orange-400 font-mono">
-              {Object.values(watchedStatus).filter(Boolean).length}/5 Vistas
-            </span>
-          </h3>
-          <span className="text-xs text-gray-400 font-mono">
-            Haz clic en la portada para ver detalles o marca si lograste verla
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span>Las 5 del Día</span>
+              <span className={`text-xs px-2.5 py-0.5 rounded font-mono font-bold ${
+                isDaySuperado 
+                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' 
+                  : 'bg-orange-950 text-orange-400 border border-orange-500/30'
+              }`}>
+                {watchedCount}/5 Vistas
+              </span>
+            </h3>
+
+            {isDaySuperado ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-xs font-bold font-mono shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse">
+                <Trophy className="w-3.5 h-3.5 text-emerald-400" />
+                <span>¡RETO DEL DÍA SUPERADO! (3+ vistas) 🏆</span>
+              </div>
+            ) : (
+              <span className="text-xs text-orange-300/80 font-mono">
+                {watchedCount === 0 
+                  ? '🎯 Mira al menos 3 de las 5 para superar el reto' 
+                  : `🔥 Te falta${3 - watchedCount === 1 ? '' : 'n'} ${3 - watchedCount} para superar el reto de hoy`}
+              </span>
+            )}
+          </div>
+
+          <span className="text-xs text-gray-400 font-mono hidden sm:block">
+            Haz clic en la carátula o en "¿Dónde Ver?" para buscar en streaming
           </span>
         </div>
 
@@ -631,8 +711,25 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
                     <p className="text-[10px] text-orange-400/80 font-mono mt-0.5 line-clamp-1">{movie.subgenre || 'Horror'}</p>
                   </div>
 
-                  {/* Watched Action Button */}
-                  <div className="mt-4 pt-3 border-t border-white/5">
+                  {/* Streaming Platforms & Watched Action */}
+                  <div className="mt-3 space-y-2.5">
+                    {/* Where to Watch Streaming Link */}
+                    <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                      <a
+                        href={`https://www.justwatch.com/mx/buscar?q=${encodeURIComponent(movie.title)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-orange-400 hover:text-orange-300 transition-colors"
+                        title="Ver plataformas de streaming en JustWatch"
+                      >
+                        <Tv className="w-3.5 h-3.5" />
+                        <span>¿Dónde ver?</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                      </a>
+
+                      <span className="text-[10px] text-gray-500 font-mono">Streaming</span>
+                    </div>
+
                     <button
                       onClick={() => toggleWatched(movie.id)}
                       className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
