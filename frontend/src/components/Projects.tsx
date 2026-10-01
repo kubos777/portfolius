@@ -178,10 +178,25 @@ export default function Projects() {
 
               {/* Action Link for Route */}
               {project.route && (
-                <div className="p-6 pt-0">
+                <div className="p-6 pt-0 space-y-2">
+                  {project.id === 0 && (
+                    <Link
+                      to="/horror-movies?poster=today"
+                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-orange-600 to-red-600 hover:from-amber-400 hover:to-red-500 text-white transition-all shadow-[0_0_20px_rgba(249,115,22,0.4)] hover:shadow-[0_0_30px_rgba(249,115,22,0.65)] transform hover:scale-[1.02] active:scale-95 group/poster"
+                      id="generate-today-poster-project-btn"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-yellow-200 animate-spin" style={{ animationDuration: '3s' }} />
+                      <span>🖼️ Generar Póster de Hoy (5 Películas) 🎃</span>
+                    </Link>
+                  )}
+
                   <Link
                     to={project.route}
-                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-600 via-red-600 to-rose-700 hover:from-orange-500 hover:to-rose-600 text-white transition-all shadow-[0_0_20px_rgba(249,115,22,0.35)] hover:shadow-[0_0_25px_rgba(249,115,22,0.55)] group/link"
+                    className={`w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition-all group/link ${
+                      project.id === 0
+                        ? 'bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10'
+                        : 'bg-gradient-to-r from-orange-600 via-red-600 to-rose-700 hover:from-orange-500 hover:to-rose-600 text-white shadow-[0_0_20px_rgba(249,115,22,0.35)]'
+                    }`}
                     id="open-horror-scraper-btn"
                   >
                     <span>🎃 Iniciar Reto de Halloween & Explorar</span>

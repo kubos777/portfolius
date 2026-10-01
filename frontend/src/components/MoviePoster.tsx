@@ -101,7 +101,7 @@ const HORROR_BACKDROPS = [
   'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=600&q=80', // VHS Static Terror
 ];
 
-function getBackdropForMovie(id: string, title: string): string {
+export function getBackdropForMovie(id: string, title: string): string {
   let hash = 0;
   const str = id + title;
   for (let i = 0; i < str.length; i++) {

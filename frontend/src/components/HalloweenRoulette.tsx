@@ -18,10 +18,12 @@ import {
   Trophy,
   Filter,
   Sparkles,
-  Layers
+  Layers,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
 import storyBgImage from '../assets/halloween_story_bg.jpg';
-import MoviePoster from './MoviePoster';
+import MoviePoster, { getCachedPoster, fetchWikipediaPoster, getBackdropForMovie } from './MoviePoster';
 
 interface Movie {
   id: string;
@@ -108,6 +110,365 @@ function playSpookySound(type: 'spin' | 'reveal' | 'win') {
   }
 }
 
+// Helper to draw rounded rectangle safely on any HTML5 canvas
+function drawCanvasRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+}
+
+// Safely pre-load image element with CORS
+function loadPosterImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const timer = setTimeout(() => resolve(null), 2500);
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve(img);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
+    img.src = src;
+  });
+}
+
+interface RenderPosterParams {
+  ctx: CanvasRenderingContext2D;
+  canvas: HTMLCanvasElement;
+  bgImg: HTMLImageElement | null;
+  movies: Movie[];
+  loadedImages: (HTMLImageElement | null)[];
+  day: number;
+  isToday: boolean;
+  watched: Record<string, boolean>;
+  watchedCount: number;
+  selectedYears: number[];
+  isAllYearsSelected: boolean;
+  useImages: boolean;
+}
+
+function renderTheatricalPoster({
+  ctx,
+  canvas,
+  bgImg,
+  movies,
+  loadedImages,
+  day,
+  isToday,
+  watched,
+  watchedCount,
+  selectedYears,
+  isAllYearsSelected,
+  useImages,
+}: RenderPosterParams) {
+  canvas.width = 1080;
+  canvas.height = 1920;
+
+  // 1. Base Dark Fill
+  ctx.fillStyle = '#07050B';
+  ctx.fillRect(0, 0, 1080, 1920);
+
+  // 2. Background Image
+  if (useImages && bgImg) {
+    ctx.drawImage(bgImg, 0, 0, 1080, 1920);
+  }
+
+  // 3. Dark Wash & Cinematic Vignette
+  const darkGrad = ctx.createLinearGradient(0, 0, 0, 1920);
+  darkGrad.addColorStop(0, 'rgba(8, 5, 12, 0.88)');
+  darkGrad.addColorStop(0.2, 'rgba(8, 5, 12, 0.72)');
+  darkGrad.addColorStop(0.8, 'rgba(8, 5, 12, 0.78)');
+  darkGrad.addColorStop(1, 'rgba(8, 5, 12, 0.96)');
+  ctx.fillStyle = darkGrad;
+  ctx.fillRect(0, 0, 1080, 1920);
+
+  const radialGlow = ctx.createRadialGradient(540, 240, 50, 540, 240, 750);
+  radialGlow.addColorStop(0, 'rgba(234, 88, 12, 0.25)');
+  radialGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = radialGlow;
+  ctx.fillRect(0, 0, 1080, 1920);
+
+  // 4. Theatrical Double Borders
+  ctx.strokeStyle = 'rgba(249, 115, 22, 0.5)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(28, 28, 1080 - 56, 1920 - 56);
+
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(38, 38, 1080 - 76, 1920 - 76);
+
+  // Corner ornaments
+  ctx.fillStyle = '#EA580C';
+  [[28, 28], [1080 - 28, 28], [28, 1920 - 28], [1080 - 28, 1920 - 28]].forEach(([cx, cy]) => {
+    ctx.fillRect(cx - 5, cy - 5, 10, 10);
+  });
+
+  // 5. Header (Top)
+  // Festival Pill
+  ctx.fillStyle = 'rgba(249, 115, 22, 0.16)';
+  ctx.strokeStyle = '#F97316';
+  ctx.lineWidth = 1.5;
+  drawCanvasRoundRect(ctx, 540 - 270, 76, 540, 44, 22);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillStyle = '#FB923C';
+  ctx.fillText('🎃 MARATÓN DE HALLOWEEN • SPOOKTOBER 🎃', 540, 105);
+
+  // Title
+  ctx.font = '900 62px sans-serif';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(239, 68, 68, 0.85)';
+  ctx.shadowBlur = 24;
+  ctx.fillText('LAS 5 PELÍCULAS DE HOY', 540, 190);
+
+  // Sub-header (Day)
+  ctx.font = '900 42px sans-serif';
+  ctx.fillStyle = '#F59E0B';
+  ctx.shadowColor = 'rgba(245, 158, 11, 0.75)';
+  ctx.shadowBlur = 18;
+  const dayStr = isToday ? `DÍA ${day} DE OCTUBRE (HOY)` : `DÍA ${day} DE OCTUBRE`;
+  ctx.fillText(dayStr, 540, 252);
+
+  // Subtitle
+  ctx.shadowBlur = 0;
+  ctx.font = '600 23px sans-serif';
+  ctx.fillStyle = '#CBD5E1';
+  const subtitleStr = isAllYearsSelected
+    ? 'Cartelera Oficial del Reto • Archivo Histórico (2000–2026)'
+    : `Edición Terror (${selectedYears.length} Años: ${selectedYears.slice(0, 3).join(', ')}${selectedYears.length > 3 ? '...' : ''})`;
+  ctx.fillText(subtitleStr, 540, 302);
+
+  // Separator line
+  const sepGrad = ctx.createLinearGradient(120, 335, 960, 335);
+  sepGrad.addColorStop(0, 'rgba(249, 115, 22, 0)');
+  sepGrad.addColorStop(0.5, 'rgba(249, 115, 22, 0.8)');
+  sepGrad.addColorStop(1, 'rgba(249, 115, 22, 0)');
+  ctx.strokeStyle = sepGrad;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(140, 335);
+  ctx.lineTo(940, 335);
+  ctx.stroke();
+
+  // 6. The 5 Movie Cards
+  const cardStartY = 365;
+  const cardHeight = 230;
+  const cardGap = 24;
+
+  movies.forEach((movie, i) => {
+    const cardY = cardStartY + i * (cardHeight + cardGap);
+    const isWatched = !!watched[movie.id];
+    const cardW = 940;
+    const cardX = 70;
+
+    // Card background
+    ctx.fillStyle = isWatched ? 'rgba(22, 16, 32, 0.96)' : 'rgba(14, 11, 20, 0.94)';
+    drawCanvasRoundRect(ctx, cardX, cardY, cardW, cardHeight, 18);
+    ctx.fill();
+
+    // Card border
+    ctx.strokeStyle = isWatched ? '#10B981' : 'rgba(249, 115, 22, 0.35)';
+    ctx.lineWidth = isWatched ? 2.5 : 1.5;
+    ctx.stroke();
+
+    // Movie Thumbnail Poster
+    const thumbX = cardX + 18;
+    const thumbY = cardY + 16;
+    const thumbW = 132;
+    const thumbH = 198;
+
+    ctx.save();
+    drawCanvasRoundRect(ctx, thumbX, thumbY, thumbW, thumbH, 12);
+    ctx.clip();
+
+    const img = loadedImages[i];
+    if (useImages && img) {
+      ctx.drawImage(img, thumbX, thumbY, thumbW, thumbH);
+    } else {
+      // Stylized cinematic dark fallback card
+      const fbGrad = ctx.createLinearGradient(thumbX, thumbY, thumbX + thumbW, thumbY + thumbH);
+      fbGrad.addColorStop(0, '#1E122C');
+      fbGrad.addColorStop(1, '#090610');
+      ctx.fillStyle = fbGrad;
+      ctx.fillRect(thumbX, thumbY, thumbW, thumbH);
+
+      ctx.textAlign = 'center';
+      ctx.font = '36px sans-serif';
+      ctx.fillText('💀', thumbX + thumbW / 2, thumbY + 80);
+      ctx.font = 'bold 18px monospace';
+      ctx.fillStyle = '#F97316';
+      ctx.fillText(String(movie.year), thumbX + thumbW / 2, thumbY + 120);
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#9CA3AF';
+      ctx.fillText('HD ARCHIVE', thumbX + thumbW / 2, thumbY + 145);
+    }
+
+    // Thumbnail gradient footer
+    const tOver = ctx.createLinearGradient(thumbX, thumbY + 120, thumbX, thumbY + thumbH);
+    tOver.addColorStop(0, 'rgba(0,0,0,0)');
+    tOver.addColorStop(1, 'rgba(0,0,0,0.8)');
+    ctx.fillStyle = tOver;
+    ctx.fillRect(thumbX, thumbY + 120, thumbW, 78);
+    ctx.restore();
+
+    // Thumbnail border
+    ctx.strokeStyle = isWatched ? 'rgba(16, 185, 129, 0.6)' : 'rgba(249, 115, 22, 0.45)';
+    ctx.lineWidth = 1.5;
+    drawCanvasRoundRect(ctx, thumbX, thumbY, thumbW, thumbH, 12);
+    ctx.stroke();
+
+    // Circular Number Badge
+    ctx.fillStyle = '#F97316';
+    ctx.beginPath();
+    ctx.arc(thumbX + 16, thumbY + 16, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.font = '900 18px sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(String(i + 1), thumbX + 16, thumbY + 22);
+
+    // Text details
+    const textX = thumbX + thumbW + 24;
+
+    // Title
+    ctx.textAlign = 'left';
+    ctx.font = '900 32px sans-serif';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 8;
+    let titleStr = movie.title;
+    if (titleStr.length > 28) titleStr = titleStr.substring(0, 26) + '...';
+    ctx.fillText(titleStr, textX, cardY + 54);
+    ctx.shadowBlur = 0;
+
+    // Year & Genre
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.2)';
+    ctx.strokeStyle = '#F97316';
+    ctx.lineWidth = 1;
+    drawCanvasRoundRect(ctx, textX, cardY + 76, 78, 28, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = '#FB923C';
+    ctx.fillText(String(movie.year), textX + 39, cardY + 96);
+
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillStyle = '#FDBA74';
+    let genreStr = movie.subgenre || 'Terror';
+    if (genreStr.length > 22) genreStr = genreStr.substring(0, 20) + '...';
+    ctx.fillText(`•  ${genreStr}`, textX + 90, cardY + 96);
+
+    // Director
+    ctx.font = '500 21px sans-serif';
+    ctx.fillStyle = '#E2E8F0';
+    let dirStr = `🎬 Dir: ${movie.director.split(',')[0].trim()}`;
+    if (dirStr.length > 34) dirStr = dirStr.substring(0, 32) + '...';
+    ctx.fillText(dirStr, textX, cardY + 142);
+
+    // Cast
+    ctx.font = '400 19px sans-serif';
+    ctx.fillStyle = '#94A3B8';
+    let castStr = movie.cast && movie.cast !== 'Desconocido'
+      ? `👥 Reparto: ${movie.cast.split(',').slice(0, 3).join(', ')}`
+      : '👥 Elenco: Joya de Terror de Culto';
+    if (castStr.length > 38) castStr = castStr.substring(0, 36) + '...';
+    ctx.fillText(castStr, textX, cardY + 180);
+
+    // Watched Status Badge on right
+    const badgeX = cardX + cardW - 160;
+    const badgeY = cardY + 84;
+    if (isWatched) {
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+      ctx.strokeStyle = '#10B981';
+      ctx.lineWidth = 1.5;
+      drawCanvasRoundRect(ctx, badgeX, badgeY, 140, 48, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 19px sans-serif';
+      ctx.fillStyle = '#34D399';
+      ctx.fillText('✓ VISTA 👁️', badgeX + 70, badgeY + 31);
+    } else {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 1.5;
+      drawCanvasRoundRect(ctx, badgeX, badgeY, 140, 48, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillStyle = '#9CA3AF';
+      ctx.fillText('🎃 POR VER', badgeX + 70, badgeY + 31);
+    }
+  });
+
+  // 7. Footer
+  const isDaySuperado = watchedCount >= 3;
+  ctx.fillStyle = 'rgba(15, 10, 22, 0.9)';
+  ctx.strokeStyle = isDaySuperado ? '#10B981' : '#F59E0B';
+  ctx.lineWidth = 2;
+  drawCanvasRoundRect(ctx, 90, 1640, 900, 74, 16);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.font = '900 24px sans-serif';
+  if (isDaySuperado) {
+    ctx.fillStyle = '#34D399';
+    ctx.shadowColor = 'rgba(16, 185, 129, 0.8)';
+    ctx.shadowBlur = 12;
+    ctx.fillText(`🏆 ¡RETO DÍA ${day} SUPERADO! (${watchedCount}/5 VISTAS) 🏆`, 540, 1686);
+  } else {
+    ctx.fillStyle = '#FBBF24';
+    ctx.shadowBlur = 0;
+    ctx.fillText(`🎃 RETO DÍA ${day}: ${watchedCount}/5 PELÍCULAS VISTAS (Meta: ver al menos 3)`, 540, 1686);
+  }
+  ctx.shadowBlur = 0;
+
+  // Platform brand
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = '#F97316';
+  ctx.fillText('PORTFOLIUS • EL ARCHIVO DEL TERROR', 540, 1755);
+
+  ctx.font = '500 18px monospace';
+  ctx.fillStyle = '#94A3B8';
+  ctx.fillText('3,088 Películas de Terror (2000–2026) • Creado por Jorge Chávez (@kubos777)', 540, 1795);
+
+  ctx.font = '400 16px sans-serif';
+  ctx.fillStyle = '#64748B';
+  ctx.fillText('Disponibles en Streaming • Busca cada título en JustWatch', 540, 1830);
+}
+
 export default function HalloweenRoulette({ allMovies, onSelectMovie }: HalloweenRouletteProps) {
   // Base default day on today's calendar date
   const getTodayDay = () => {
@@ -131,6 +492,10 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
   const [generatedStoryUrl, setGeneratedStoryUrl] = useState<string | null>(null);
   const [isSharedView, setIsSharedView] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
+
+  // Poster Generator state
+  const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
+  const [posterTargetDay, setPosterTargetDay] = useState<number>(todayDayNumber);
 
   // Multi-Year selection state (defaults to all years)
   const [selectedYears, setSelectedYears] = useState<number[]>(() => {
@@ -225,10 +590,16 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     generatePicksForDay(selectedDay, true, years);
   };
 
-  // Check URL query parameters for shared challenge on mount
+  // Check URL query parameters for shared challenge or poster generation on mount
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
+      const posterParam = params.get('poster');
+      if (posterParam === 'today' || posterParam === '1' || params.has('poster')) {
+        setTimeout(() => {
+          handleGeneratePosterForDay(todayDayNumber);
+        }, 500);
+      }
       const challengeToken = params.get('challenge');
       if (challengeToken && allMovies.length > 0) {
         const decoded = JSON.parse(decodeURIComponent(escape(atob(challengeToken))));
@@ -395,135 +766,181 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
     }));
   };
 
-  // Generate Instagram Story Image on Canvas
-  const generateInstagramStory = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    canvas.width = 1080;
-    canvas.height = 1920;
-
-    const bg = new Image();
-    bg.crossOrigin = 'anonymous';
-    bg.src = storyBgImage;
-
-    bg.onload = () => {
-      ctx.drawImage(bg, 0, 0, 1080, 1920);
-
-      const grad = ctx.createLinearGradient(0, 400, 0, 1500);
-      grad.addColorStop(0, 'rgba(10, 10, 15, 0.4)');
-      grad.addColorStop(0.5, 'rgba(10, 10, 15, 0.75)');
-      grad.addColorStop(1, 'rgba(10, 10, 15, 0.4)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(100, 440, 880, 1050);
-
-      ctx.textAlign = 'center';
-      ctx.font = 'bold 36px monospace';
-      ctx.fillStyle = '#F97316';
-      ctx.shadowColor = 'rgba(249, 115, 22, 0.8)';
-      ctx.shadowBlur = 18;
-      ctx.fillText('🎃 SPOOKTOBER 31-DAY HORROR CHALLENGE 🎃', 540, 360);
-
-      ctx.font = '900 64px sans-serif';
-      ctx.fillStyle = '#FFFFFF';
-      ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
-      ctx.shadowBlur = 24;
-      ctx.fillText(`DÍA ${selectedDay} DE OCTUBRE`, 540, 440);
-
-      ctx.font = '600 28px sans-serif';
-      ctx.fillStyle = '#D1D5DB';
-      ctx.shadowBlur = 0;
-      const subtitleText = isAllYearsSelected
-        ? 'Maratón de 5 Películas de Terror (2000-2026)'
-        : selectedYears.length === 1
-        ? `Edición Terror del Año ${selectedYears[0]}`
-        : `Edición Terror (${selectedYears.length} Años: ${selectedYears.slice(0, 3).join(', ')}${selectedYears.length > 3 ? '...' : ''})`;
-      ctx.fillText(subtitleText, 540, 490);
-
-      const startY = 570;
-      const rowHeight = 170;
-
-      dailyPicks.forEach((movie, index) => {
-        const y = startY + index * rowHeight;
-        const isWatched = !!watchedStatus[movie.id];
-
-        ctx.fillStyle = isWatched ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255, 255, 255, 0.06)';
-        ctx.strokeStyle = isWatched ? '#EF4444' : 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(140, y, 800, 140, 16);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.textAlign = 'left';
-        ctx.font = 'bold 44px sans-serif';
-        if (isWatched) {
-          ctx.fillStyle = '#EF4444';
-          ctx.fillText('✓', 170, y + 84);
-        } else {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-          ctx.fillText('☐', 170, y + 84);
+  // Deterministic or cached movie pick loader for any given day
+  const getPicksForSpecificDay = (day: number, yearsToUse = selectedYears): Movie[] => {
+    if (day === selectedDay && dailyPicks.length === 5) {
+      return dailyPicks;
+    }
+    try {
+      const saved = localStorage.getItem(`spooktober_picks_day_${day}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 5) {
+          return parsed;
         }
+      }
+    } catch {}
 
-        ctx.font = 'bold 36px sans-serif';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 6;
-        
-        let titleText = `${index + 1}. ${movie.title}`;
-        if (titleText.length > 28) {
-          titleText = titleText.substring(0, 26) + '...';
-        }
-        ctx.fillText(titleText, 230, y + 60);
+    const targetYears = yearsToUse && yearsToUse.length > 0 ? yearsToUse : ALL_YEARS;
+    const yearSet = new Set(targetYears);
+    const pool = allMovies.filter((m) => yearSet.has(m.year) && m.title && m.director && m.director !== 'Desconocido');
+    const source = pool.length >= 5 ? pool : allMovies;
+    if (source.length === 0) return [];
 
-        ctx.shadowBlur = 0;
-        ctx.font = '500 24px monospace';
-        ctx.fillStyle = '#F97316';
-        ctx.fillText(`(${movie.year})`, 230, y + 105);
+    const picks: Movie[] = [];
+    const used = new Set<string>();
+    for (let i = 0; i < source.length && picks.length < 5; i++) {
+      const idx = (day * 37 + i * 113) % source.length;
+      const m = source[idx];
+      if (!used.has(m.id)) {
+        picks.push(m);
+        used.add(m.id);
+      }
+    }
+    return picks;
+  };
 
-        ctx.font = '22px sans-serif';
-        ctx.fillStyle = '#9CA3AF';
-        const metaText = `Dir: ${movie.director.split(',')[0]} • ${movie.subgenre || 'Horror'}`;
-        const truncatedMeta = metaText.length > 36 ? metaText.substring(0, 34) + '...' : metaText;
-        ctx.fillText(truncatedMeta, 330, y + 105);
-      });
+  // Generate Theatrical Poster with 5 Movies on Canvas
+  const handleGeneratePosterForDay = async (targetDay: number = todayDayNumber) => {
+    if (isGeneratingPoster) return;
+    setIsGeneratingPoster(true);
 
-      ctx.textAlign = 'center';
-      if (isDaySuperado) {
-        ctx.font = 'bold 32px sans-serif';
-        ctx.fillStyle = '#34D399';
-        ctx.shadowColor = 'rgba(16, 185, 129, 0.9)';
-        ctx.shadowBlur = 18;
-        ctx.fillText(`🏆 ¡RETO DÍA ${selectedDay} SUPERADO! (${watchedCount}/5 VISTAS) 🏆`, 540, 1530);
-        ctx.shadowBlur = 0;
-      } else {
-        ctx.font = 'bold 26px sans-serif';
-        ctx.fillStyle = '#FBBF24';
-        ctx.shadowBlur = 0;
-        ctx.fillText(`🎃 RETO DÍA ${selectedDay}: ${watchedCount}/5 VISTAS (Mínimo 3 para superar)`, 540, 1530);
+    try {
+      // 1. Get 5 movies for targetDay
+      let picks = getPicksForSpecificDay(targetDay, selectedYears);
+      if (!picks || picks.length < 5) {
+        picks = allMovies.slice(0, 5);
       }
 
-      ctx.font = '22px monospace';
-      ctx.fillStyle = '#9CA3AF';
-      ctx.fillText('Generado en Portfolius • Creado por Jorge Chávez (@kubos777)', 540, 1580);
+      // 2. Get watched status for targetDay
+      let watched: Record<string, boolean> = {};
+      if (targetDay === selectedDay) {
+        watched = watchedStatus;
+      } else {
+        try {
+          const savedWatched = localStorage.getItem(`spooktober_watched_day_${targetDay}`);
+          if (savedWatched) watched = JSON.parse(savedWatched);
+        } catch {}
+      }
+      const watchedCount = picks.filter((m) => !!watched[m.id]).length;
 
-      const dataUrl = canvas.toDataURL('image/png');
+      // 3. Pre-fetch images in parallel with timeout
+      const loadedImages = await Promise.all(
+        picks.map(async (m) => {
+          try {
+            let url: string | null | undefined = getCachedPoster(m.id);
+            if (!url) {
+              url = await Promise.race([
+                fetchWikipediaPoster(m),
+                new Promise<string | null>((res) => setTimeout(() => res(null), 1800)),
+              ]);
+            }
+            if (!url) {
+              url = getBackdropForMovie(m.id, m.title);
+            }
+            return await loadPosterImage(url);
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      // 4. Load background image
+      const bgImg = await loadPosterImage(storyBgImage);
+
+      // 5. Get canvas
+      const canvas = canvasRef.current || document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // 6. Draw theatrical poster on canvas
+      renderTheatricalPoster({
+        ctx,
+        canvas,
+        bgImg,
+        movies: picks,
+        loadedImages,
+        day: targetDay,
+        isToday: targetDay === todayDayNumber,
+        watched,
+        watchedCount,
+        selectedYears,
+        isAllYearsSelected,
+        useImages: true,
+      });
+
+      let dataUrl: string;
+      try {
+        dataUrl = canvas.toDataURL('image/png');
+      } catch {
+        // Fallback: draw safe mode without external cross-origin images
+        renderTheatricalPoster({
+          ctx,
+          canvas,
+          bgImg,
+          movies: picks,
+          loadedImages: [null, null, null, null, null],
+          day: targetDay,
+          isToday: targetDay === todayDayNumber,
+          watched,
+          watchedCount,
+          selectedYears,
+          isAllYearsSelected,
+          useImages: false,
+        });
+        dataUrl = canvas.toDataURL('image/png');
+      }
+
       setGeneratedStoryUrl(dataUrl);
+      setPosterTargetDay(targetDay);
       setShowStoryModal(true);
-    };
+
+      if (soundEnabled) playSpookySound('win');
+    } catch (e) {
+      console.error('Error generating poster:', e);
+    } finally {
+      setIsGeneratingPoster(false);
+    }
+  };
+
+  const generateInstagramStory = () => {
+    handleGeneratePosterForDay(selectedDay);
   };
 
   const handleDownloadImage = () => {
     if (!generatedStoryUrl) return;
     const a = document.createElement('a');
     a.href = generatedStoryUrl;
-    a.download = `Spooktober_Dia_${selectedDay}_Challenge.png`;
+    const isToday = posterTargetDay === todayDayNumber;
+    a.download = isToday
+      ? `Spooktober_Poster_Hoy_Dia_${posterTargetDay}.png`
+      : `Spooktober_Poster_Dia_${posterTargetDay}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
+  };
+
+  const handleSharePoster = async () => {
+    if (!generatedStoryUrl) return;
+    try {
+      if (navigator.share) {
+        const res = await fetch(generatedStoryUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `Spooktober_Poster_Dia_${posterTargetDay}.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Cartelera Spooktober - Día ${posterTargetDay}`,
+            text: `🎃 ¡Mira mi cartelera con las 5 películas de terror de hoy en el maratón Spooktober! ¿Aceptas el reto?`,
+            files: [file],
+          });
+          return;
+        }
+      }
+    } catch {
+      // fallback
+    }
+
+    handleSharePermalink();
   };
 
   const handleSharePermalink = () => {
@@ -598,7 +1015,7 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
           </p>
         </div>
 
-        {/* Audio Toggle, Share Link & Instagram Button */}
+        {/* Audio Toggle, Share Link & Poster Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
@@ -619,13 +1036,34 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
           </button>
 
           <button
-            onClick={generateInstagramStory}
-            disabled={dailyPicks.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-600 via-rose-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white shadow-[0_0_20px_rgba(249,115,22,0.35)] transition-all disabled:opacity-50"
-            id="share-story-btn"
+            onClick={() => handleGeneratePosterForDay(todayDayNumber)}
+            disabled={isGeneratingPoster || allMovies.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-orange-600 to-red-600 hover:from-amber-400 hover:to-red-500 text-white shadow-[0_0_25px_rgba(249,115,22,0.4)] hover:shadow-[0_0_35px_rgba(249,115,22,0.7)] transition-all transform hover:scale-[1.03] active:scale-95 cursor-pointer disabled:opacity-50"
+            id="generate-today-poster-btn"
+            title="Generar póster en alta resolución con las 5 películas de hoy"
           >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Plantilla Instagram</span>
+            {isGeneratingPoster ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                <span>Generando Póster...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-yellow-200 animate-pulse" />
+                <span>🖼️ Póster de Hoy (5 Películas) 🎃</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={generateInstagramStory}
+            disabled={isGeneratingPoster || dailyPicks.length === 0}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-gray-200 hover:text-white border border-white/10 transition-all disabled:opacity-50"
+            id="share-story-btn"
+            title={`Generar póster para el Día ${selectedDay}`}
+          >
+            <Share2 className="w-3.5 h-3.5 text-orange-400" />
+            <span>Póster Día {selectedDay}</span>
           </button>
         </div>
       </div>
@@ -891,9 +1329,28 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
             )}
           </div>
 
-          <span className="text-xs text-gray-400 font-mono hidden sm:block">
-            Haz clic en la carátula o en "¿Dónde Ver?" para buscar en streaming
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleGeneratePosterForDay(selectedDay)}
+              disabled={isGeneratingPoster || dailyPicks.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 transition-all cursor-pointer"
+              title={`Generar póster del Día ${selectedDay}`}
+            >
+              <Sparkles className="w-3 h-3 text-orange-400" />
+              <span>Póster Día {selectedDay}</span>
+            </button>
+            {selectedDay !== todayDayNumber && (
+              <button
+                onClick={() => handleGeneratePosterForDay(todayDayNumber)}
+                disabled={isGeneratingPoster || allMovies.length === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-orange-950/80 hover:bg-orange-900 border border-orange-500/50 text-orange-200 hover:text-white transition-all shadow-[0_0_10px_rgba(249,115,22,0.2)] cursor-pointer"
+                title="Generar póster con las 5 películas de hoy"
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-orange-400" />
+                <span>Póster de Hoy 🎃</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -1007,44 +1464,63 @@ export default function HalloweenRoulette({ allMovies, onSelectMovie }: Hallowee
       {/* Hidden Canvas for Story Generation */}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* Instagram Story Modal Preview */}
+      {/* Theatrical Poster / Story Modal Preview */}
       {showStoryModal && generatedStoryUrl && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-lg animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
           onClick={() => setShowStoryModal(false)}
         >
           <div 
-            className="relative w-full max-w-sm sm:max-w-md bg-[#0D0B14] border-2 border-orange-500/60 rounded-3xl p-6 shadow-2xl space-y-4 text-center"
+            className="relative w-full max-w-sm sm:max-w-md bg-[#0D0B14] border-2 border-orange-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 text-center"
             onClick={(e) => e.stopPropagation()}
           >
             <button 
               onClick={() => setShowStoryModal(false)}
-              className="absolute top-4 right-4 p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10"
+              className="absolute top-4 right-4 p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div>
-              <h3 className="text-lg font-black text-white">Tu Plantilla de Instagram</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Lista para compartir en tus historias de Halloween</p>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-950/60 border border-orange-500/40 text-orange-400 text-[11px] font-mono mb-2">
+                <Sparkles className="w-3 h-3 text-yellow-300" />
+                <span>Cartelera Oficial en Alta Resolución</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-black text-white">
+                {posterTargetDay === todayDayNumber
+                  ? `🎃 Las 5 de Hoy (Día ${posterTargetDay})`
+                  : `🎃 Póster del Día ${posterTargetDay} de Octubre`}
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Formato HD (1080x1920) listo para historias de Instagram, WhatsApp o descargar
+              </p>
             </div>
 
             {/* Image Preview */}
-            <div className="rounded-2xl overflow-hidden border border-white/10 max-h-[460px] shadow-2xl">
+            <div className="rounded-2xl overflow-hidden border border-orange-500/30 max-h-[440px] sm:max-h-[480px] shadow-[0_0_30px_rgba(249,115,22,0.2)] bg-black/60 flex items-center justify-center">
               <img 
                 src={generatedStoryUrl} 
-                alt="Instagram Story Card" 
-                className="w-full h-auto object-contain"
+                alt="Horror Movie Poster" 
+                className="w-full h-auto max-h-[440px] sm:max-h-[480px] object-contain rounded-xl"
               />
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
               <button
                 onClick={handleDownloadImage}
-                className="flex-1 inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white shadow-lg shadow-orange-600/30 transition-all"
+                className="flex-1 inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-orange-600 to-red-600 hover:from-amber-400 hover:to-red-500 text-white shadow-lg shadow-orange-600/30 transition-all cursor-pointer transform active:scale-95"
               >
                 <Download className="w-4 h-4" />
-                Descargar PNG (1080x1920)
+                <span>Descargar PNG (1080x1920)</span>
+              </button>
+
+              <button
+                onClick={handleSharePoster}
+                className="inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-all cursor-pointer"
+                title="Compartir o copiar enlace"
+              >
+                <Share2 className="w-4 h-4 text-orange-400" />
+                <span>Compartir</span>
               </button>
             </div>
           </div>
