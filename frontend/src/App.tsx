@@ -7,6 +7,7 @@ import Projects from './components/Projects';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import HorrorScraperPage from './pages/HorrorScraperPage';
+import HorrorScraperLab from './pages/HorrorScraperLab';
 
 function PortfolioMain() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<PortfolioMain />} />
         <Route path="/horror-movies" element={<HorrorScraperPage />} />
+        <Route path="/horror-movies/scraper-lab" element={<HorrorScraperLab />} />
         {/* Fallback to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

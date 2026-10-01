@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, ArrowRight, Film } from 'lucide-react';
+import { Sparkles, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface Project {
@@ -19,13 +19,13 @@ export default function Projects() {
   const projectsData: Project[] = [
     {
       id: 0,
-      title: 'Horror Movie Scraper (2000–2026)',
-      description: 'Web Scraper y motor de indexación de películas de terror de los últimos 26 años. Extracción automatizada con Node.js & Cheerio, filtrado dinámico por época, país y subgéneros, y consola interactiva.',
+      title: 'El Archivo del Terror & Ruleta de Halloween',
+      description: 'Plataforma interactiva de cine de terror con 3,088 películas de los últimos 26 años (2000–2026). Incluye Ruleta del Miedo para el reto de 31 días de octubre, seguimiento de películas vistas, generador de historias para Instagram y motor de indexación.',
       category: 'fullstack',
-      tech: ['React', 'Node.js', 'Cheerio', 'Web Scraping', 'Tailwind CSS'],
-      gradient: 'from-red-900 via-rose-700 to-purple-900',
+      tech: ['React', 'Node.js', 'Cheerio', 'Canvas API', 'Web Audio API', 'Tailwind CSS'],
+      gradient: 'from-orange-950 via-red-900 to-black',
       route: '/horror-movies',
-      badge: 'APP EN VIVO',
+      badge: '🎃 RETO HALLOWEEN',
     },
     {
       id: 1,
@@ -181,11 +181,10 @@ export default function Projects() {
                 <div className="p-6 pt-0">
                   <Link
                     to={project.route}
-                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:shadow-[0_0_25px_rgba(239,68,68,0.5)] group/link"
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-orange-600 via-red-600 to-rose-700 hover:from-orange-500 hover:to-rose-600 text-white transition-all shadow-[0_0_20px_rgba(249,115,22,0.35)] hover:shadow-[0_0_25px_rgba(249,115,22,0.55)] group/link"
                     id="open-horror-scraper-btn"
                   >
-                    <Film className="w-3.5 h-3.5 text-white" />
-                    <span>Explorar Scrapper & Películas</span>
+                    <span>🎃 Iniciar Reto de Halloween & Explorar</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover/link:translate-x-1 transition-transform" />
                   </Link>
                 </div>
