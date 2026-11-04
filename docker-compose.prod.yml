@@ -1,0 +1,29 @@
+name: portfolius-prod
+
+services:
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: portfolius/web:latest
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8081}:80"
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.portfolius.rule=Host(`${DOMAIN:-kubos.site}`) || Host(`www.${DOMAIN:-kubos.site}`)"
+      - "traefik.http.routers.portfolius.entrypoints=web"
+      - "traefik.http.services.portfolius.loadbalancer.server.port=80"
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  dokploy-network:
+    external: true
